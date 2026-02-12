@@ -176,7 +176,7 @@
                      ondragleave="dragLeaveHandler(event)">
                     <div class="mb-4">
                         <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 002 2z" />
                         </svg>
                     </div>
                     <h3 class="text-lg font-medium mb-2">Фотографии маркировок</h3>
@@ -191,15 +191,24 @@
 
             <div class="flex justify-center">
                 <button id="upload-btn" onclick="uploadFiles()" disabled class="px-8 py-3 bg-gray-400 text-white rounded-lg font-medium cursor-not-allowed">
-                    Загрузить и продолжить
+                    Загрузить файлы
                 </button>
             </div>
         </div>
 
-        <!-- Results Section -->
-        <div id="results-section" class="hidden">
-            <!-- Step Results will be dynamically inserted here -->
+        <!-- Start Processing Button -->
+        <div id="start-processing-section" class="hidden bg-white rounded-lg shadow-sm p-6 mb-6">
+            <div class="text-center">
+                <h2 class="text-xl font-semibold mb-4">🚀 Файлы загружены успешно</h2>
+                <p class="text-gray-600 mb-6">Готов к началу обработки. Процесс займёт 2-3 минуты.</p>
+                <button id="start-processing-btn" onclick="startProcessing()" class="px-8 py-3 bg-success text-white rounded-lg font-medium hover:bg-green-700">
+                    Начать обработку
+                </button>
+            </div>
         </div>
+
+        <!-- Results Container -->
+        <div id="results-container"></div>
     </div>
 
     <script>
@@ -210,8 +219,9 @@
         };
         
         let currentStep = 1;
+        let filesUploaded = false;
         
-        // Функция fetch с таймаутом
+        // Функция fetch с таймаутом 120 секунд
         async function fetchWithTimeout(url, options = {}, timeout = 120000) {
             const controller = new AbortController();
             const id = setTimeout(() => controller.abort(), timeout);
@@ -226,7 +236,7 @@
             } catch (error) {
                 clearTimeout(id);
                 if (error.name === 'AbortError') {
-                    throw new Error('Превышен таймаут запроса (60 сек)');
+                    throw new Error('Превышен таймаут запроса (2 минуты)');
                 }
                 throw error;
             }
@@ -303,178 +313,229 @@
             });
 
             try {
-                console.log('[STEP] Uploading files...'); showLoading('Загрузка файлов...');
+                console.log('[DEBUG] Начинаю загрузку файлов...');
+                showLoading('Загрузка файлов на сервер...');
                 
                 const response = await fetchWithTimeout('/upload-files/', {
                     method: 'POST',
                     body: formData
                 });
                 
+                hideLoading();
+                
                 if (!response.ok) {
                     const err = await response.json().catch(() => ({}));
-                    showError(err.detail || 'Ошибка загрузки файлов');
+                    showError(err?.detail || 'Ошибка загрузки файлов');
                     return;
                 }
+                
                 const result = await response.json();
+                console.log('[DEBUG] Результат загрузки:', result);
                 
                 if (result?.success) {
-                    await processStep1();
+                    filesUploaded = true;
+                    document.getElementById('upload-section').classList.add('hidden');
+                    document.getElementById('start-processing-section').classList.remove('hidden');
                 } else {
                     showError('Ошибка загрузки файлов');
                 }
             } catch (error) {
-                showError('Ошибка: ' + error.message);
+                hideLoading();
+                showError('Ошибка загрузки: ' + error.message);
             }
+        }
+
+        async function startProcessing() {
+            if (!filesUploaded) {
+                showError('Сначала загрузите файлы');
+                return;
+            }
+
+            document.getElementById('start-processing-section').classList.add('hidden');
+            
+            // Запускаем все шаги последовательно
+            await processStep1();
         }
 
         async function processStep1() {
             try {
-                console.log('[STEP] Step1 check files...'); showLoading('Проверка файлов...');
+                console.log('[DEBUG] Запускаю Шаг 1: проверка файлов...');
+                showLoading('Шаг 1 из 7: Проверка файлов...');
                 
                 const response = await fetchWithTimeout('/step1-check-files/', {
                     method: 'POST'
                 });
                 
+                hideLoading();
+                
                 if (!response.ok) {
                     const err = await response.json().catch(() => ({}));
-                    showError(err.detail || 'Ошибка проверки файлов');
+                    showStepError(1, 'проверка файлов', err?.detail || 'Ошибка проверки файлов', () => processStep1());
                     return;
                 }
+                
                 const result = await response.json();
+                console.log('[DEBUG] Результат шага 1:', result);
                 
                 if (result?.success) {
                     updateProgress(1);
                     showStep1Results(result);
-                    await processStep2();
+                    // Переходим к шагу 2
+                    setTimeout(() => processStep2(), 500);
                 } else {
-                    showError(result?.missing ? 'Не загружены: ' + result.missing.join(', ') : 'Ошибка проверки файлов');
+                    showStepError(1, 'проверка файлов', result?.missing ? 'Не загружены: ' + result.missing.join(', ') : 'Ошибка проверки файлов', () => processStep1());
                 }
             } catch (error) {
-                showError('Ошибка проверки файлов: ' + error.message);
+                hideLoading();
+                showStepError(1, 'проверка файлов', 'Ошибка: ' + error.message, () => processStep1());
             }
         }
 
         async function processStep2() {
             try {
-                console.log('[STEP] Step2 photo quality...'); showLoading('Анализ качества фотографий...');
+                console.log('[DEBUG] Запускаю Шаг 2: анализ качества фотографий...');
+                showLoading('Шаг 2 из 7: Анализ качества фотографий...');
                 
                 const response = await fetchWithTimeout('/step2-check-photo-quality/', {
                     method: 'POST'
                 });
                 
+                hideLoading();
+                
                 if (!response.ok) {
                     const err = await response.json().catch(() => ({}));
-                    showError(err.detail || 'Ошибка анализа качества фотографий');
+                    showStepError(2, 'анализ качества фотографий', err?.detail || 'Ошибка анализа качества фотографий', () => processStep2());
                     return;
                 }
                 
                 const result = await response.json();
+                console.log('[DEBUG] Результат шага 2:', result);
                 
                 if (result?.success) {
                     updateProgress(2);
                     showStep2Results(result);
-                    await processStep3();
+                    // Переходим к шагу 3
+                    setTimeout(() => processStep3(), 500);
                 } else {
-                    showError('Ошибка анализа качества фотографий');
+                    showStepError(2, 'анализ качества фотографий', 'Ошибка анализа качества фотографий', () => processStep2());
                 }
             } catch (error) {
-                showError('Ошибка анализа качества: ' + error.message);
+                hideLoading();
+                showStepError(2, 'анализ качества фотографий', 'Ошибка: ' + error.message, () => processStep2());
             }
         }
 
         async function processStep3() {
             try {
-                console.log('[STEP] Step3 Gemini Vision...'); showLoading('Извлечение маркировок через Gemini Vision...');
+                console.log('[DEBUG] Запускаю Шаг 3: извлечение маркировок через Gemini Vision...');
+                showLoading('Шаг 3 из 7: Извлечение маркировок... (может занять до 2 минут)');
                 
                 const response = await fetchWithTimeout('/step3-extract-markings/', {
                     method: 'POST'
                 });
                 
+                hideLoading();
+                
                 if (!response.ok) {
                     const err = await response.json().catch(() => ({}));
-                    showError(err.detail || 'Ошибка извлечения маркировок');
+                    showStepError(3, 'извлечение маркировок', err?.detail || 'Ошибка извлечения маркировок', () => processStep3());
                     return;
                 }
                 
                 const result = await response.json();
+                console.log('[DEBUG] Результат шага 3:', result);
                 
                 if (result?.success) {
                     updateProgress(3);
                     showStep3Results(result);
-                    await processStep4();
+                    // Переходим к шагу 4
+                    setTimeout(() => processStep4(), 500);
                 } else {
-                    showError('Ошибка извлечения маркировок');
+                    showStepError(3, 'извлечение маркировок', 'Ошибка извлечения маркировок', () => processStep3());
                 }
             } catch (error) {
-                showError('Ошибка извлечения маркировок: ' + error.message);
+                hideLoading();
+                showStepError(3, 'извлечение маркировок', 'Ошибка: ' + error.message, () => processStep3());
             }
         }
 
         async function processStep4() {
             try {
-                console.log('[STEP] Step4 count...'); showLoading('Двойной пересчёт изделий...');
+                console.log('[DEBUG] Запускаю Шаг 4: двойной пересчёт изделий...');
+                showLoading('Шаг 4 из 7: Двойной пересчёт изделий...');
                 
                 const response = await fetchWithTimeout('/step4-count-verification/', {
                     method: 'POST'
                 });
                 
+                hideLoading();
+                
                 if (!response.ok) {
                     const err = await response.json().catch(() => ({}));
-                    showError(err.detail || 'Ошибка пересчёта изделий');
+                    showStepError(4, 'пересчёт изделий', err?.detail || 'Ошибка пересчёта изделий', () => processStep4());
                     return;
                 }
                 
                 const result = await response.json();
+                console.log('[DEBUG] Результат шага 4:', result);
                 
                 if (result?.success) {
                     updateProgress(4);
                     showStep4Results(result);
-                    await processStep5();
+                    // Переходим к шагу 5
+                    setTimeout(() => processStep5(), 500);
                 } else {
-                    showError('Ошибка пересчёта изделий');
+                    showStepError(4, 'пересчёт изделий', 'Ошибка пересчёта изделий', () => processStep4());
                 }
             } catch (error) {
-                showError('Ошибка пересчёта: ' + error.message);
+                hideLoading();
+                showStepError(4, 'пересчёт изделий', 'Ошибка: ' + error.message, () => processStep4());
             }
         }
 
         async function processStep5() {
             try {
-                console.log('[STEP] Step5 compare...'); showLoading('Сопоставление со спецификацией...');
+                console.log('[DEBUG] Запускаю Шаг 5: сопоставление со спецификацией...');
+                showLoading('Шаг 5 из 7: Сопоставление со спецификацией...');
                 
                 const response = await fetchWithTimeout('/step5-compare-specification/', {
                     method: 'POST'
                 });
                 
+                hideLoading();
+                
                 if (!response.ok) {
                     const err = await response.json().catch(() => ({}));
-                    showError(err.detail || 'Ошибка сопоставления со спецификацией');
+                    showStepError(5, 'сопоставление со спецификацией', err?.detail || 'Ошибка сопоставления со спецификацией', () => processStep5());
                     return;
                 }
                 
                 const result = await response.json();
+                console.log('[DEBUG] Результат шага 5:', result);
                 
                 if (result?.success) {
                     updateProgress(5);
                     showStep5Results(result);
+                    // СТОП - показываем форму для step 6
                     showStep6Form();
                 } else {
-                    showError('Ошибка сопоставления со спецификацией');
+                    showStepError(5, 'сопоставление со спецификацией', 'Ошибка сопоставления со спецификацией', () => processStep5());
                 }
             } catch (error) {
-                showError('Ошибка сопоставления: ' + error.message);
+                hideLoading();
+                showStepError(5, 'сопоставление со спецификацией', 'Ошибка: ' + error.message, () => processStep5());
             }
         }
 
         function showStep6Form() {
-            updateProgress(6);
-            
             const html = `
                 <div class="bg-white rounded-lg shadow-sm p-6 mb-6 fade-in">
                     <h2 class="text-xl font-semibold mb-6 flex items-center">
-                        <span class="w-8 h-8 bg-primary text-white rounded-full flex items-center justify-center text-sm font-bold mr-3">6</span>
-                        Финальные параметры
+                        <span class="w-8 h-8 bg-warning text-white rounded-full flex items-center justify-center text-sm font-bold mr-3">6</span>
+                        Финальные параметры отгрузки
                     </h2>
+                    
+                    <p class="text-gray-600 mb-6">Укажите параметры для генерации документов:</p>
                     
                     <form id="final-params-form" onsubmit="processStep6(event)">
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
@@ -503,15 +564,15 @@
                         </div>
                         
                         <div class="flex justify-center">
-                            <button type="submit" class="px-8 py-3 bg-primary text-white rounded-lg font-medium hover:bg-blue-700">
-                                Сгенерировать файлы
+                            <button type="submit" class="px-8 py-3 bg-success text-white rounded-lg font-medium hover:bg-green-700">
+                                Сгенерировать документы
                             </button>
                         </div>
                     </form>
                 </div>
             `;
             
-            showResultsSection(html);
+            appendResultsSection(html);
         }
 
         async function processStep6(event) {
@@ -520,62 +581,103 @@
             const formData = new FormData(event.target);
             
             try {
-                showLoading('Обработка параметров...');
+                console.log('[DEBUG] Запускаю Шаг 6: обработка параметров...');
+                showLoading('Шаг 6 из 7: Обработка параметров отгрузки...');
                 
                 const response = await fetchWithTimeout('/step6-final-questions/', {
                     method: 'POST',
                     body: formData
                 });
                 
+                hideLoading();
+                
                 if (!response.ok) {
                     const err = await response.json().catch(() => ({}));
-                    showError(err.detail || 'Ошибка обработки параметров');
+                    showError(err?.detail || 'Ошибка обработки параметров');
                     return;
                 }
                 
                 const result = await response.json();
+                console.log('[DEBUG] Результат шага 6:', result);
                 
                 if (result?.success) {
-                    await processStep7();
+                    updateProgress(6);
+                    // Убираем форму и переходим к генерации файлов
+                    document.getElementById('final-params-form').parentElement.style.opacity = '0.5';
+                    setTimeout(() => processStep7(), 500);
                 } else {
                     showError('Ошибка обработки параметров');
                 }
             } catch (error) {
+                hideLoading();
                 showError('Ошибка: ' + error.message);
             }
         }
 
         async function processStep7() {
             try {
-                updateProgress(7);
-                showLoading('Генерация Excel файлов...');
+                console.log('[DEBUG] Запускаю Шаг 7: генерация файлов...');
+                showLoading('Шаг 7 из 7: Генерация Excel файлов...');
                 
                 const response = await fetchWithTimeout('/step7-generate-files/', {
                     method: 'POST'
                 });
                 
+                hideLoading();
+                
                 if (!response.ok) {
                     const err = await response.json().catch(() => ({}));
-                    showError(err.detail || 'Ошибка генерации файлов');
+                    showStepError(7, 'генерация файлов', err?.detail || 'Ошибка генерации файлов', () => processStep7());
                     return;
                 }
                 
                 const result = await response.json();
+                console.log('[DEBUG] Результат шага 7:', result);
                 
                 if (result?.success) {
+                    updateProgress(7);
                     showStep7Results(result);
                 } else {
-                    showError('Ошибка генерации файлов');
+                    showStepError(7, 'генерация файлов', 'Ошибка генерации файлов', () => processStep7());
                 }
             } catch (error) {
-                showError('Ошибка генерации: ' + error.message);
+                hideLoading();
+                showStepError(7, 'генерация файлов', 'Ошибка: ' + error.message, () => processStep7());
             }
+        }
+
+        // Функция показа ошибки шага с кнопкой повтора
+        function showStepError(stepNum, stepName, errorMessage, retryFunction) {
+            const html = `
+                <div class="bg-white rounded-lg shadow-sm p-6 mb-6 fade-in border-l-4 border-danger">
+                    <h3 class="text-lg font-semibold mb-4 text-danger flex items-center">
+                        ❌ Шаг ${stepNum} из 7: ${stepName} — ошибка
+                    </h3>
+                    <p class="text-gray-700 mb-4">${errorMessage}</p>
+                    <div class="flex gap-3">
+                        <button onclick="retryStep${stepNum}()" class="px-6 py-2 bg-primary text-white rounded-lg hover:bg-blue-700 flex items-center gap-2">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                            </svg>
+                            Повторить
+                        </button>
+                        <button onclick="resetSession()" class="px-6 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600">
+                            🔄 Начать заново
+                        </button>
+                    </div>
+                </div>
+            `;
+            
+            appendResultsSection(html);
+            
+            // Динамически создаем функцию повтора
+            window[`retryStep${stepNum}`] = retryFunction;
         }
 
         function showStep1Results(result) {
             const html = `
                 <div class="bg-white rounded-lg shadow-sm p-6 mb-6 fade-in">
-                    <h3 class="text-lg font-semibold mb-4 text-success">✅ Шаг 1: Файлы загружены успешно</h3>
+                    <h3 class="text-lg font-semibold mb-4 text-success">✅ Шаг 1 из 7: Проверка файлов завершена</h3>
                     <div class="grid grid-cols-3 gap-4 text-center">
                         <div class="p-4 bg-green-50 rounded-lg">
                             <div class="text-2xl font-bold text-success">${result?.files_count?.specification || 0}</div>
@@ -592,7 +694,7 @@
                     </div>
                 </div>
             `;
-            showResultsSection(html);
+            appendResultsSection(html);
         }
 
         function showStep2Results(result) {
@@ -608,7 +710,7 @@
             
             const html = `
                 <div class="bg-white rounded-lg shadow-sm p-6 mb-6 fade-in">
-                    <h3 class="text-lg font-semibold mb-4">📷 Шаг 2: Анализ качества фотографий</h3>
+                    <h3 class="text-lg font-semibold mb-4 text-success">✅ Шаг 2 из 7: Анализ качества фотографий завершён</h3>
                     <div class="grid grid-cols-3 gap-4 text-center mb-6">
                         <div class="p-4 bg-blue-50 rounded-lg">
                             <div class="text-2xl font-bold text-primary">${result?.summary?.total || 0}</div>
@@ -658,7 +760,7 @@
             
             const html = `
                 <div class="bg-white rounded-lg shadow-sm p-6 mb-6 fade-in">
-                    <h3 class="text-lg font-semibold mb-4">🤖 Шаг 3: Извлечение маркировок (Gemini Vision)</h3>
+                    <h3 class="text-lg font-semibold mb-4 text-success">✅ Шаг 3 из 7: Извлечение маркировок завершено</h3>
                     <div class="grid grid-cols-4 gap-4 text-center mb-6">
                         <div class="p-4 bg-blue-50 rounded-lg">
                             <div class="text-2xl font-bold text-primary">${result?.summary?.total || 0}</div>
@@ -702,7 +804,7 @@
         function showStep4Results(result) {
             const html = `
                 <div class="bg-white rounded-lg shadow-sm p-6 mb-6 fade-in">
-                    <h3 class="text-lg font-semibold mb-4">🔢 Шаг 4: Двойной пересчёт изделий</h3>
+                    <h3 class="text-lg font-semibold mb-4 text-success">✅ Шаг 4 из 7: Двойной пересчёт завершён</h3>
                     
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                         <div class="p-4 bg-blue-50 rounded-lg">
@@ -762,7 +864,7 @@
             
             const html = `
                 <div class="bg-white rounded-lg shadow-sm p-6 mb-6 fade-in">
-                    <h3 class="text-lg font-semibold mb-4">⚖️ Шаг 5: Сопоставление со спецификацией</h3>
+                    <h3 class="text-lg font-semibold mb-4 text-success">✅ Шаг 5 из 7: Сопоставление со спецификацией завершено</h3>
                     
                     <div class="grid grid-cols-4 gap-4 text-center mb-6">
                         <div class="p-4 bg-green-50 rounded-lg">
@@ -834,7 +936,7 @@
             
             const html = `
                 <div class="bg-white rounded-lg shadow-sm p-6 mb-6 fade-in">
-                    <h3 class="text-lg font-semibold mb-4 text-success">🎉 Шаг 7: Файлы сгенерированы успешно!</h3>
+                    <h3 class="text-lg font-semibold mb-4 text-success">🎉 Шаг 7 из 7: Генерация файлов завершена!</h3>
                     
                     <div class="mb-6 p-4 bg-blue-50 rounded-lg">
                         <h4 class="font-semibold mb-2">Параметры отгрузки:</h4>
@@ -854,11 +956,18 @@
                             ✅ Обработка завершена! Все документы готовы к использованию.
                         </p>
                     </div>
+                    
+                    <div class="mt-6 flex justify-center">
+                        <button onclick="resetSession()" class="px-6 py-3 bg-primary text-white rounded-lg hover:bg-blue-700 flex items-center gap-2">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                            </svg>
+                            Обработать новую поставку
+                        </button>
+                    </div>
                 </div>
             `;
             appendResultsSection(html);
-            
-            hideLoading();
         }
 
         function updateProgress(step) {
@@ -879,22 +988,15 @@
             currentStep = step;
         }
 
-        function showResultsSection(html) {
-            const resultsSection = document.getElementById('results-section');
-            resultsSection.innerHTML = html;
-            resultsSection.classList.remove('hidden');
-            document.getElementById('upload-section').classList.add('hidden');
-        }
-
         function appendResultsSection(html) {
-            const resultsSection = document.getElementById('results-section');
-            resultsSection.innerHTML += html;
+            const resultsContainer = document.getElementById('results-container');
+            resultsContainer.innerHTML += html;
         }
 
         function showLoading(message) {
             const loadingHtml = `
                 <div id="loading-overlay" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-                    <div class="bg-white rounded-lg p-6 flex items-center space-x-4">
+                    <div class="bg-white rounded-lg p-6 flex items-center space-x-4 max-w-md">
                         <div class="loading-spinner"></div>
                         <span class="text-lg">${message}</span>
                     </div>
@@ -918,12 +1020,14 @@
         async function resetSession() {
             if (confirm('Вы уверены? Все данные будут удалены.')) {
                 try {
+                    console.log('[DEBUG] Сброс сессии...');
+                    showLoading('Сброс сессии...');
                     const response = await fetchWithTimeout('/reset', { method: 'POST' });
                     if (response.ok) {
                         location.reload();
                     } else {
                         const err = await response.json().catch(() => ({}));
-                        showError(err.detail || 'Ошибка сброса сессии');
+                        showError(err?.detail || 'Ошибка сброса сессии');
                     }
                 } catch (error) {
                     showError('Ошибка сброса: ' + error.message);
@@ -941,7 +1045,7 @@
             });
             
             // Устанавливаем текущую дату в поле по умолчанию при его появлении
-            document.addEventListener('input', function(e) {
+            document.addEventListener('focus', function(e) {
                 if (e.target.id === 'shipment_date' && !e.target.value) {
                     e.target.value = dateString;
                 }
