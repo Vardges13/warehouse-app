@@ -238,9 +238,9 @@ class WarehouseAssistant:
             quantity_col = None
             name_col = None
             
-            article_keywords = ['артикул', 'код', 'article', 'арт', 'номер', 'марк', 'обозначение', 'позиц', 'id', '№']
-            quantity_keywords = ['количество', 'кол-во', 'кол.', 'qty', 'quantity', 'шт', 'count', 'объем', 'план']
-            name_keywords = ['наименование', 'название', 'name', 'описание', 'изделие', 'продукц', 'товар', 'позиция']
+            article_keywords = ['маркировка', 'артикул', 'код', 'article', 'арт', 'номер', 'обозначение', 'id', '№', 'марка']
+            quantity_keywords = ['количество', 'кол-во', 'кол.', 'qty', 'quantity', 'count', 'объем', 'план']
+            name_keywords = ['позиция', 'наименование', 'название', 'name', 'описание', 'изделие', 'продукц', 'товар']
             
             for col in df.columns:
                 col_lower = str(col).lower().strip()
