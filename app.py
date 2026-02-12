@@ -221,11 +221,19 @@ class WarehouseAssistant:
                 result_json = json.loads(response_text)
                 
                 print(f"[GEMINI] Parsed JSON: {result_json}")
-                # Нормализуем латиницу→кириллицу в article
+                # Нормализуем article
+                import re as _re
                 _lat2cyr = str.maketrans('AaBbCcEeHhKkMmOoPpTtXx', 'АаВвСсЕеНнКкМмОоРрТтХх')
                 for key in ('article', 'name'):
                     if result_json.get(key):
-                        result_json[key] = result_json[key].translate(_lat2cyr)
+                        val = result_json[key].translate(_lat2cyr)
+                        # Исправляем частые ошибки OCR
+                        val = val.replace('перфо', 'перф').replace('перФ', 'перф').replace('перфФ', 'перф')
+                        # Нормализуем формат: Ка.перфNN
+                        match = _re.search(r'[Кк]а\.?перф\D*(\d+)', val)
+                        if match:
+                            val = f"Ка.перф{match.group(1)}"
+                        result_json[key] = val
                 # Проверяем наличие ошибки
                 if result_json.get('error'):
                     return {
