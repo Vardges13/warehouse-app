@@ -184,7 +184,7 @@ class WarehouseAssistant:
             for _attempt in range(3):
                 try:
                     response = self.client.models.generate_content(
-                        model='gemini-2.0-flash',
+                        model='gemini-2.5-flash',
                         contents=[
                             {
                                 "role": "user",
