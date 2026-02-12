@@ -1,0 +1,876 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Складской ассистент</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#1e40af',
+                        secondary: '#0f766e',
+                        success: '#059669',
+                        warning: '#d97706',
+                        danger: '#dc2626'
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        .drag-over {
+            border-color: #1e40af !important;
+            background-color: #eff6ff !important;
+        }
+        
+        .loading-spinner {
+            border: 2px solid #f3f4f6;
+            border-top: 2px solid #1e40af;
+            border-radius: 50%;
+            width: 20px;
+            height: 20px;
+            animation: spin 1s linear infinite;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .progress-step {
+            transition: all 0.3s ease;
+        }
+        
+        .progress-step.active {
+            background-color: #1e40af;
+            color: white;
+        }
+        
+        .progress-step.completed {
+            background-color: #059669;
+            color: white;
+        }
+        
+        .fade-in {
+            animation: fadeIn 0.5s ease-in;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+    </style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+    <!-- Header -->
+    <header class="bg-white shadow-sm border-b">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between items-center py-4">
+                <div class="flex items-center space-x-4">
+                    <div class="w-10 h-10 bg-primary rounded-lg flex items-center justify-center">
+                        <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                        </svg>
+                    </div>
+                    <div>
+                        <h1 class="text-2xl font-bold text-gray-900">Складской ассистент</h1>
+                        <p class="text-sm text-gray-600">Высокоточная логистика и подготовка документов</p>
+                    </div>
+                </div>
+                <button onclick="resetSession()" class="px-4 py-2 text-sm text-gray-600 hover:text-gray-800 border border-gray-300 rounded-lg hover:bg-gray-50">
+                    🔄 Начать заново
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Progress Bar -->
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+        <div class="bg-white rounded-lg shadow-sm p-6 mb-6">
+            <h2 class="text-lg font-semibold mb-4">Прогресс выполнения</h2>
+            <div class="flex items-center justify-between">
+                <div id="step-1" class="progress-step active flex items-center justify-center w-10 h-10 rounded-full border-2 border-primary text-primary font-semibold">1</div>
+                <div class="flex-1 h-1 bg-gray-200 mx-2"></div>
+                <div id="step-2" class="progress-step flex items-center justify-center w-10 h-10 rounded-full border-2 border-gray-300 text-gray-400 font-semibold">2</div>
+                <div class="flex-1 h-1 bg-gray-200 mx-2"></div>
+                <div id="step-3" class="progress-step flex items-center justify-center w-10 h-10 rounded-full border-2 border-gray-300 text-gray-400 font-semibold">3</div>
+                <div class="flex-1 h-1 bg-gray-200 mx-2"></div>
+                <div id="step-4" class="progress-step flex items-center justify-center w-10 h-10 rounded-full border-2 border-gray-300 text-gray-400 font-semibold">4</div>
+                <div class="flex-1 h-1 bg-gray-200 mx-2"></div>
+                <div id="step-5" class="progress-step flex items-center justify-center w-10 h-10 rounded-full border-2 border-gray-300 text-gray-400 font-semibold">5</div>
+                <div class="flex-1 h-1 bg-gray-200 mx-2"></div>
+                <div id="step-6" class="progress-step flex items-center justify-center w-10 h-10 rounded-full border-2 border-gray-300 text-gray-400 font-semibold">6</div>
+                <div class="flex-1 h-1 bg-gray-200 mx-2"></div>
+                <div id="step-7" class="progress-step flex items-center justify-center w-10 h-10 rounded-full border-2 border-gray-300 text-gray-400 font-semibold">7</div>
+            </div>
+            <div class="flex justify-between mt-2 text-xs text-gray-500">
+                <span>Загрузка</span>
+                <span>Качество</span>
+                <span>Извлечение</span>
+                <span>Подсчёт</span>
+                <span>Сравнение</span>
+                <span>Параметры</span>
+                <span>Файлы</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Content -->
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-12">
+        <!-- Step 1: File Upload -->
+        <div id="upload-section" class="bg-white rounded-lg shadow-sm p-6 mb-6">
+            <h2 class="text-xl font-semibold mb-6 flex items-center">
+                <span class="w-8 h-8 bg-primary text-white rounded-full flex items-center justify-center text-sm font-bold mr-3">1</span>
+                Загрузка входных данных
+            </h2>
+            
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+                <!-- Specification Upload -->
+                <div class="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-primary transition-colors" 
+                     id="spec-dropzone"
+                     ondrop="dropHandler(event, 'specification')" 
+                     ondragover="dragOverHandler(event)" 
+                     ondragleave="dragLeaveHandler(event)">
+                    <div class="mb-4">
+                        <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                        </svg>
+                    </div>
+                    <h3 class="text-lg font-medium mb-2">Спецификация</h3>
+                    <p class="text-sm text-gray-600 mb-4">Файл Excel со списком изделий</p>
+                    <input type="file" id="specification-input" accept=".xlsx,.xls" class="hidden" onchange="fileSelected(event, 'specification')">
+                    <button onclick="document.getElementById('specification-input').click()" class="px-4 py-2 bg-primary text-white rounded-lg hover:bg-blue-700">
+                        Выбрать файл
+                    </button>
+                    <div id="spec-status" class="mt-2 text-sm hidden"></div>
+                </div>
+
+                <!-- Template Upload -->
+                <div class="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-primary transition-colors" 
+                     id="template-dropzone"
+                     ondrop="dropHandler(event, 'template')" 
+                     ondragover="dragOverHandler(event)" 
+                     ondragleave="dragLeaveHandler(event)">
+                    <div class="mb-4">
+                        <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2v0a2 2 0 01-2-2v-2a2 2 0 00-2-2H8z" />
+                        </svg>
+                    </div>
+                    <h3 class="text-lg font-medium mb-2">Шаблон накладной</h3>
+                    <p class="text-sm text-gray-600 mb-4">Пустой бланк накладной Excel</p>
+                    <input type="file" id="template-input" accept=".xlsx,.xls" class="hidden" onchange="fileSelected(event, 'template')">
+                    <button onclick="document.getElementById('template-input').click()" class="px-4 py-2 bg-primary text-white rounded-lg hover:bg-blue-700">
+                        Выбрать файл
+                    </button>
+                    <div id="template-status" class="mt-2 text-sm hidden"></div>
+                </div>
+
+                <!-- Photos Upload -->
+                <div class="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-primary transition-colors" 
+                     id="photos-dropzone"
+                     ondrop="dropHandler(event, 'photos')" 
+                     ondragover="dragOverHandler(event)" 
+                     ondragleave="dragLeaveHandler(event)">
+                    <div class="mb-4">
+                        <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                        </svg>
+                    </div>
+                    <h3 class="text-lg font-medium mb-2">Фотографии маркировок</h3>
+                    <p class="text-sm text-gray-600 mb-4">1 фото = 1 изделие</p>
+                    <input type="file" id="photos-input" accept="image/*" multiple class="hidden" onchange="fileSelected(event, 'photos')">
+                    <button onclick="document.getElementById('photos-input').click()" class="px-4 py-2 bg-primary text-white rounded-lg hover:bg-blue-700">
+                        Выбрать фото
+                    </button>
+                    <div id="photos-status" class="mt-2 text-sm hidden"></div>
+                </div>
+            </div>
+
+            <div class="flex justify-center">
+                <button id="upload-btn" onclick="uploadFiles()" disabled class="px-8 py-3 bg-gray-400 text-white rounded-lg font-medium cursor-not-allowed">
+                    Загрузить и продолжить
+                </button>
+            </div>
+        </div>
+
+        <!-- Results Section -->
+        <div id="results-section" class="hidden">
+            <!-- Step Results will be dynamically inserted here -->
+        </div>
+    </div>
+
+    <script>
+        let uploadedFiles = {
+            specification: null,
+            template: null,
+            photos: []
+        };
+        
+        let currentStep = 1;
+
+        // Drag and drop handlers
+        function dragOverHandler(event) {
+            event.preventDefault();
+            event.currentTarget.classList.add('drag-over');
+        }
+
+        function dragLeaveHandler(event) {
+            event.currentTarget.classList.remove('drag-over');
+        }
+
+        function dropHandler(event) {
+            event.preventDefault();
+            event.currentTarget.classList.remove('drag-over');
+            
+            const fileType = event.currentTarget.id.includes('spec') ? 'specification' : 
+                           event.currentTarget.id.includes('template') ? 'template' : 'photos';
+            
+            const files = event.dataTransfer.files;
+            handleFileSelection(files, fileType);
+        }
+
+        function fileSelected(event, type) {
+            handleFileSelection(event.target.files, type);
+        }
+
+        function handleFileSelection(files, type) {
+            if (type === 'photos') {
+                uploadedFiles.photos = Array.from(files);
+                updateFileStatus('photos', `Выбрано ${files.length} фото`);
+            } else {
+                uploadedFiles[type] = files[0];
+                updateFileStatus(type, files[0].name);
+            }
+            
+            checkUploadReady();
+        }
+
+        function updateFileStatus(type, message) {
+            const statusElement = document.getElementById(`${type === 'specification' ? 'spec' : type}-status`);
+            statusElement.textContent = `✅ ${message}`;
+            statusElement.classList.remove('hidden');
+            statusElement.classList.add('text-success');
+        }
+
+        function checkUploadReady() {
+            const ready = uploadedFiles.specification && uploadedFiles.template && uploadedFiles.photos.length > 0;
+            const uploadBtn = document.getElementById('upload-btn');
+            
+            if (ready) {
+                uploadBtn.disabled = false;
+                uploadBtn.classList.remove('bg-gray-400', 'cursor-not-allowed');
+                uploadBtn.classList.add('bg-primary', 'hover:bg-blue-700', 'cursor-pointer');
+            }
+        }
+
+        async function uploadFiles() {
+            const formData = new FormData();
+            
+            if (uploadedFiles.specification) {
+                formData.append('specification', uploadedFiles.specification);
+            }
+            
+            if (uploadedFiles.template) {
+                formData.append('template', uploadedFiles.template);
+            }
+            
+            uploadedFiles.photos.forEach(photo => {
+                formData.append('photos', photo);
+            });
+
+            try {
+                showLoading('Загрузка файлов...');
+                
+                const response = await fetch('/upload-files/', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    await processStep1();
+                } else {
+                    showError('Ошибка загрузки файлов');
+                }
+            } catch (error) {
+                showError('Ошибка: ' + error.message);
+            }
+        }
+
+        async function processStep1() {
+            try {
+                showLoading('Проверка файлов...');
+                
+                const response = await fetch('/step1-check-files/', {
+                    method: 'POST'
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    updateProgress(1);
+                    showStep1Results(result);
+                    await processStep2();
+                } else {
+                    showStepResults('Шаг 1: Проверка файлов', result, false);
+                }
+            } catch (error) {
+                showError('Ошибка проверки файлов: ' + error.message);
+            }
+        }
+
+        async function processStep2() {
+            try {
+                showLoading('Анализ качества фотографий...');
+                
+                const response = await fetch('/step2-check-photo-quality/', {
+                    method: 'POST'
+                });
+                
+                const result = await response.json();
+                
+                updateProgress(2);
+                showStep2Results(result);
+                
+                if (result.success) {
+                    await processStep3();
+                }
+            } catch (error) {
+                showError('Ошибка анализа качества: ' + error.message);
+            }
+        }
+
+        async function processStep3() {
+            try {
+                showLoading('Извлечение маркировок через Gemini Vision...');
+                
+                const response = await fetch('/step3-extract-markings/', {
+                    method: 'POST'
+                });
+                
+                const result = await response.json();
+                
+                updateProgress(3);
+                showStep3Results(result);
+                
+                if (result.success) {
+                    await processStep4();
+                }
+            } catch (error) {
+                showError('Ошибка извлечения маркировок: ' + error.message);
+            }
+        }
+
+        async function processStep4() {
+            try {
+                showLoading('Двойной пересчёт изделий...');
+                
+                const response = await fetch('/step4-count-verification/', {
+                    method: 'POST'
+                });
+                
+                const result = await response.json();
+                
+                updateProgress(4);
+                showStep4Results(result);
+                
+                if (result.success) {
+                    await processStep5();
+                }
+            } catch (error) {
+                showError('Ошибка пересчёта: ' + error.message);
+            }
+        }
+
+        async function processStep5() {
+            try {
+                showLoading('Сопоставление со спецификацией...');
+                
+                const response = await fetch('/step5-compare-specification/', {
+                    method: 'POST'
+                });
+                
+                const result = await response.json();
+                
+                updateProgress(5);
+                showStep5Results(result);
+                
+                if (result.success) {
+                    showStep6Form();
+                }
+            } catch (error) {
+                showError('Ошибка сопоставления: ' + error.message);
+            }
+        }
+
+        function showStep6Form() {
+            updateProgress(6);
+            
+            const html = `
+                <div class="bg-white rounded-lg shadow-sm p-6 mb-6 fade-in">
+                    <h2 class="text-xl font-semibold mb-6 flex items-center">
+                        <span class="w-8 h-8 bg-primary text-white rounded-full flex items-center justify-center text-sm font-bold mr-3">6</span>
+                        Финальные параметры
+                    </h2>
+                    
+                    <form id="final-params-form" onsubmit="processStep6(event)">
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-2">Тип отгрузки</label>
+                                <div class="space-y-2">
+                                    <label class="flex items-center">
+                                        <input type="radio" name="shipment_type" value="full" class="mr-2" required>
+                                        <span>Окончательная отгрузка</span>
+                                    </label>
+                                    <label class="flex items-center">
+                                        <input type="radio" name="shipment_type" value="partial" class="mr-2" required>
+                                        <span>Частичная отгрузка</span>
+                                    </label>
+                                </div>
+                            </div>
+                            
+                            <div>
+                                <label for="shipment_date" class="block text-sm font-medium text-gray-700 mb-2">Дата отгрузки</label>
+                                <input type="text" id="shipment_date" name="shipment_date" placeholder="ДД.ММ.ГГГГ" 
+                                       pattern="[0-9]{2}\\.[0-9]{2}\\.[0-9]{4}" 
+                                       class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary focus:border-primary" 
+                                       required>
+                                <p class="text-sm text-gray-500 mt-1">Формат: ДД.ММ.ГГГГ (например: 15.02.2026)</p>
+                            </div>
+                        </div>
+                        
+                        <div class="flex justify-center">
+                            <button type="submit" class="px-8 py-3 bg-primary text-white rounded-lg font-medium hover:bg-blue-700">
+                                Сгенерировать файлы
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            `;
+            
+            showResultsSection(html);
+        }
+
+        async function processStep6(event) {
+            event.preventDefault();
+            
+            const formData = new FormData(event.target);
+            
+            try {
+                showLoading('Обработка параметров...');
+                
+                const response = await fetch('/step6-final-questions/', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    await processStep7();
+                } else {
+                    showError('Ошибка обработки параметров');
+                }
+            } catch (error) {
+                showError('Ошибка: ' + error.message);
+            }
+        }
+
+        async function processStep7() {
+            try {
+                updateProgress(7);
+                showLoading('Генерация Excel файлов...');
+                
+                const response = await fetch('/step7-generate-files/', {
+                    method: 'POST'
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    showStep7Results(result);
+                } else {
+                    showError('Ошибка генерации файлов');
+                }
+            } catch (error) {
+                showError('Ошибка генерации: ' + error.message);
+            }
+        }
+
+        function showStep1Results(result) {
+            const html = `
+                <div class="bg-white rounded-lg shadow-sm p-6 mb-6 fade-in">
+                    <h3 class="text-lg font-semibold mb-4 text-success">✅ Шаг 1: Файлы загружены успешно</h3>
+                    <div class="grid grid-cols-3 gap-4 text-center">
+                        <div class="p-4 bg-green-50 rounded-lg">
+                            <div class="text-2xl font-bold text-success">${result.files_count.specification}</div>
+                            <div class="text-sm text-gray-600">Спецификация</div>
+                        </div>
+                        <div class="p-4 bg-green-50 rounded-lg">
+                            <div class="text-2xl font-bold text-success">${result.files_count.template}</div>
+                            <div class="text-sm text-gray-600">Шаблон</div>
+                        </div>
+                        <div class="p-4 bg-green-50 rounded-lg">
+                            <div class="text-2xl font-bold text-success">${result.files_count.photos}</div>
+                            <div class="text-sm text-gray-600">Фотографий</div>
+                        </div>
+                    </div>
+                </div>
+            `;
+            showResultsSection(html);
+        }
+
+        function showStep2Results(result) {
+            const photosTable = result.photos.map(photo => `
+                <tr class="${photo.readable ? 'bg-green-50' : 'bg-red-50'}">
+                    <td class="px-4 py-2 border-b">${photo.filename}</td>
+                    <td class="px-4 py-2 border-b text-center text-xl">${photo.status}</td>
+                    <td class="px-4 py-2 border-b">${photo.resolution}</td>
+                    <td class="px-4 py-2 border-b">${photo.brightness}</td>
+                    <td class="px-4 py-2 border-b text-sm">${photo.issues.join(', ') || 'Нет проблем'}</td>
+                </tr>
+            `).join('');
+            
+            const html = `
+                <div class="bg-white rounded-lg shadow-sm p-6 mb-6 fade-in">
+                    <h3 class="text-lg font-semibold mb-4">📷 Шаг 2: Анализ качества фотографий</h3>
+                    <div class="grid grid-cols-3 gap-4 text-center mb-6">
+                        <div class="p-4 bg-blue-50 rounded-lg">
+                            <div class="text-2xl font-bold text-primary">${result.summary.total}</div>
+                            <div class="text-sm text-gray-600">Всего фото</div>
+                        </div>
+                        <div class="p-4 bg-green-50 rounded-lg">
+                            <div class="text-2xl font-bold text-success">${result.summary.readable}</div>
+                            <div class="text-sm text-gray-600">Читаемых</div>
+                        </div>
+                        <div class="p-4 bg-red-50 rounded-lg">
+                            <div class="text-2xl font-bold text-danger">${result.summary.unreadable}</div>
+                            <div class="text-sm text-gray-600">Нечитаемых</div>
+                        </div>
+                    </div>
+                    
+                    <div class="overflow-x-auto">
+                        <table class="min-w-full bg-white">
+                            <thead class="bg-gray-50">
+                                <tr>
+                                    <th class="px-4 py-2 text-left text-sm font-medium text-gray-700">Файл</th>
+                                    <th class="px-4 py-2 text-center text-sm font-medium text-gray-700">Статус</th>
+                                    <th class="px-4 py-2 text-left text-sm font-medium text-gray-700">Разрешение</th>
+                                    <th class="px-4 py-2 text-left text-sm font-medium text-gray-700">Яркость</th>
+                                    <th class="px-4 py-2 text-left text-sm font-medium text-gray-700">Проблемы</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${photosTable}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            `;
+            appendResultsSection(html);
+        }
+
+        function showStep3Results(result) {
+            const markingsTable = result.markings.map(marking => `
+                <tr class="${marking.status === '✅' ? 'bg-green-50' : marking.status === '⚠️' ? 'bg-yellow-50' : 'bg-red-50'}">
+                    <td class="px-4 py-2 border-b text-sm">${marking.filename}</td>
+                    <td class="px-4 py-2 border-b text-center text-xl">${marking.status}</td>
+                    <td class="px-4 py-2 border-b text-sm">${marking.name || '—'}</td>
+                    <td class="px-4 py-2 border-b text-sm font-mono">${marking.article || '—'}</td>
+                    <td class="px-4 py-2 border-b text-sm">${marking.comment || '—'}</td>
+                </tr>
+            `).join('');
+            
+            const html = `
+                <div class="bg-white rounded-lg shadow-sm p-6 mb-6 fade-in">
+                    <h3 class="text-lg font-semibold mb-4">🤖 Шаг 3: Извлечение маркировок (Gemini Vision)</h3>
+                    <div class="grid grid-cols-4 gap-4 text-center mb-6">
+                        <div class="p-4 bg-blue-50 rounded-lg">
+                            <div class="text-2xl font-bold text-primary">${result.summary.total}</div>
+                            <div class="text-sm text-gray-600">Всего</div>
+                        </div>
+                        <div class="p-4 bg-green-50 rounded-lg">
+                            <div class="text-2xl font-bold text-success">${result.summary.extracted}</div>
+                            <div class="text-sm text-gray-600">Извлечено</div>
+                        </div>
+                        <div class="p-4 bg-yellow-50 rounded-lg">
+                            <div class="text-2xl font-bold text-warning">${result.summary.partial}</div>
+                            <div class="text-sm text-gray-600">Частично</div>
+                        </div>
+                        <div class="p-4 bg-red-50 rounded-lg">
+                            <div class="text-2xl font-bold text-danger">${result.summary.failed}</div>
+                            <div class="text-sm text-gray-600">Ошибки</div>
+                        </div>
+                    </div>
+                    
+                    <div class="overflow-x-auto">
+                        <table class="min-w-full bg-white">
+                            <thead class="bg-gray-50">
+                                <tr>
+                                    <th class="px-4 py-2 text-left text-sm font-medium text-gray-700">Фото</th>
+                                    <th class="px-4 py-2 text-center text-sm font-medium text-gray-700">Статус</th>
+                                    <th class="px-4 py-2 text-left text-sm font-medium text-gray-700">Наименование</th>
+                                    <th class="px-4 py-2 text-left text-sm font-medium text-gray-700">Артикул</th>
+                                    <th class="px-4 py-2 text-left text-sm font-medium text-gray-700">Комментарий</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${markingsTable}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            `;
+            appendResultsSection(html);
+        }
+
+        function showStep4Results(result) {
+            const html = `
+                <div class="bg-white rounded-lg shadow-sm p-6 mb-6 fade-in">
+                    <h3 class="text-lg font-semibold mb-4">🔢 Шаг 4: Двойной пересчёт изделий</h3>
+                    
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div class="p-4 bg-blue-50 rounded-lg">
+                            <h4 class="font-semibold mb-3">Первый подсчёт (по статусу)</h4>
+                            <div class="space-y-2">
+                                <div class="flex justify-between">
+                                    <span>Всего фотографий:</span>
+                                    <span class="font-bold">${result.first_count.total_photos}</span>
+                                </div>
+                                ${Object.entries(result.first_count.by_status).map(([status, count]) => `
+                                    <div class="flex justify-between">
+                                        <span>${status}:</span>
+                                        <span class="font-bold">${count}</span>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        </div>
+                        
+                        <div class="p-4 bg-green-50 rounded-lg">
+                            <h4 class="font-semibold mb-3">Второй подсчёт (по артикулам)</h4>
+                            <div class="space-y-2">
+                                <div class="flex justify-between">
+                                    <span>Читаемых маркировок:</span>
+                                    <span class="font-bold">${result.second_count.readable_markings}</span>
+                                </div>
+                                <div class="flex justify-between">
+                                    <span>Уникальных артикулов:</span>
+                                    <span class="font-bold">${result.second_count.unique_articles}</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="mt-6 p-4 bg-green-50 rounded-lg">
+                        <h4 class="font-semibold text-success mb-2">✅ Верификация пройдена</h4>
+                        <p class="text-sm text-gray-600">Количества сходятся, можно продолжать.</p>
+                    </div>
+                </div>
+            `;
+            appendResultsSection(html);
+        }
+
+        function showStep5Results(result) {
+            const comparisonTable = result.comparison.map(item => `
+                <tr class="${item.status === '✅' ? 'bg-green-50' : 
+                           item.status === '⬇️' ? 'bg-red-50' : 
+                           item.status === '⬆️' ? 'bg-yellow-50' : 'bg-orange-50'}">
+                    <td class="px-4 py-2 border-b font-mono text-sm">${item.article}</td>
+                    <td class="px-4 py-2 border-b text-center">${item.planned}</td>
+                    <td class="px-4 py-2 border-b text-center font-bold">${item.actual}</td>
+                    <td class="px-4 py-2 border-b text-center ${item.difference > 0 ? 'text-red-600' : item.difference < 0 ? 'text-yellow-600' : 'text-green-600'}">
+                        ${item.difference > 0 ? '+' : ''}${item.difference}
+                    </td>
+                    <td class="px-4 py-2 border-b text-center text-xl">${item.status}</td>
+                </tr>
+            `).join('');
+            
+            const html = `
+                <div class="bg-white rounded-lg shadow-sm p-6 mb-6 fade-in">
+                    <h3 class="text-lg font-semibold mb-4">⚖️ Шаг 5: Сопоставление со спецификацией</h3>
+                    
+                    <div class="grid grid-cols-4 gap-4 text-center mb-6">
+                        <div class="p-4 bg-green-50 rounded-lg">
+                            <div class="text-2xl font-bold text-success">${result.summary.exact_match}</div>
+                            <div class="text-sm text-gray-600">Точно</div>
+                        </div>
+                        <div class="p-4 bg-red-50 rounded-lg">
+                            <div class="text-2xl font-bold text-danger">${result.summary.shortage}</div>
+                            <div class="text-sm text-gray-600">Недостает</div>
+                        </div>
+                        <div class="p-4 bg-yellow-50 rounded-lg">
+                            <div class="text-2xl font-bold text-warning">${result.summary.excess}</div>
+                            <div class="text-sm text-gray-600">Пересорт</div>
+                        </div>
+                        <div class="p-4 bg-orange-50 rounded-lg">
+                            <div class="text-2xl font-bold text-orange-600">${result.summary.extra_articles}</div>
+                            <div class="text-sm text-gray-600">Лишние</div>
+                        </div>
+                    </div>
+                    
+                    <div class="overflow-x-auto">
+                        <table class="min-w-full bg-white">
+                            <thead class="bg-gray-50">
+                                <tr>
+                                    <th class="px-4 py-2 text-left text-sm font-medium text-gray-700">Артикул</th>
+                                    <th class="px-4 py-2 text-center text-sm font-medium text-gray-700">В спецификации</th>
+                                    <th class="px-4 py-2 text-center text-sm font-medium text-gray-700">Фактически</th>
+                                    <th class="px-4 py-2 text-center text-sm font-medium text-gray-700">Разница</th>
+                                    <th class="px-4 py-2 text-center text-sm font-medium text-gray-700">Статус</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${comparisonTable}
+                            </tbody>
+                        </table>
+                    </div>
+                    
+                    <div class="mt-4 text-sm text-gray-600">
+                        <p><strong>Обозначения:</strong> ✅ — точно, ⬇️ — недостает, ⬆️ — пересорт, 🔁 — лишний артикул</p>
+                    </div>
+                </div>
+            `;
+            appendResultsSection(html);
+        }
+
+        function showStep7Results(result) {
+            const filesTable = result.files.map(file => `
+                <div class="flex items-center justify-between p-4 bg-green-50 rounded-lg">
+                    <div class="flex items-center space-x-3">
+                        <div class="w-10 h-10 bg-success text-white rounded-lg flex items-center justify-center">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                            </svg>
+                        </div>
+                        <div>
+                            <div class="font-medium">${file.name}</div>
+                            <div class="text-sm text-gray-600">${file.type === 'invoice' ? 'Заполненная накладная' : 'Обновленная спецификация'}</div>
+                        </div>
+                    </div>
+                    <a href="/download/${file.type}/${file.name}" 
+                       class="px-4 py-2 bg-primary text-white rounded-lg hover:bg-blue-700 flex items-center space-x-2">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                        </svg>
+                        <span>Скачать</span>
+                    </a>
+                </div>
+            `).join('');
+            
+            const html = `
+                <div class="bg-white rounded-lg shadow-sm p-6 mb-6 fade-in">
+                    <h3 class="text-lg font-semibold mb-4 text-success">🎉 Шаг 7: Файлы сгенерированы успешно!</h3>
+                    
+                    <div class="mb-6 p-4 bg-blue-50 rounded-lg">
+                        <h4 class="font-semibold mb-2">Параметры отгрузки:</h4>
+                        <div class="grid grid-cols-2 gap-4 text-sm">
+                            <div><strong>Тип:</strong> ${result.summary.shipment_type}</div>
+                            <div><strong>Дата:</strong> ${result.summary.shipment_date}</div>
+                        </div>
+                    </div>
+                    
+                    <div class="space-y-4">
+                        <h4 class="font-semibold">Готовые документы:</h4>
+                        ${filesTable}
+                    </div>
+                    
+                    <div class="mt-6 p-4 bg-green-50 rounded-lg">
+                        <p class="text-success text-center font-medium">
+                            ✅ Обработка завершена! Все документы готовы к использованию.
+                        </p>
+                    </div>
+                </div>
+            `;
+            appendResultsSection(html);
+            
+            hideLoading();
+        }
+
+        function updateProgress(step) {
+            // Отмечаем предыдущие шаги как завершенные
+            for (let i = 1; i < step; i++) {
+                const stepElement = document.getElementById(`step-${i}`);
+                stepElement.classList.remove('active');
+                stepElement.classList.add('completed');
+            }
+            
+            // Отмечаем текущий шаг как активный
+            const currentStepElement = document.getElementById(`step-${step}`);
+            if (currentStepElement) {
+                currentStepElement.classList.remove('completed');
+                currentStepElement.classList.add('active');
+            }
+            
+            currentStep = step;
+        }
+
+        function showResultsSection(html) {
+            const resultsSection = document.getElementById('results-section');
+            resultsSection.innerHTML = html;
+            resultsSection.classList.remove('hidden');
+            document.getElementById('upload-section').classList.add('hidden');
+        }
+
+        function appendResultsSection(html) {
+            const resultsSection = document.getElementById('results-section');
+            resultsSection.innerHTML += html;
+        }
+
+        function showLoading(message) {
+            const loadingHtml = `
+                <div id="loading-overlay" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+                    <div class="bg-white rounded-lg p-6 flex items-center space-x-4">
+                        <div class="loading-spinner"></div>
+                        <span class="text-lg">${message}</span>
+                    </div>
+                </div>
+            `;
+            document.body.insertAdjacentHTML('beforeend', loadingHtml);
+        }
+
+        function hideLoading() {
+            const overlay = document.getElementById('loading-overlay');
+            if (overlay) {
+                overlay.remove();
+            }
+        }
+
+        function showError(message) {
+            hideLoading();
+            alert('Ошибка: ' + message);
+        }
+
+        async function resetSession() {
+            if (confirm('Вы уверены? Все данные будут удалены.')) {
+                try {
+                    await fetch('/reset', { method: 'POST' });
+                    location.reload();
+                } catch (error) {
+                    showError('Ошибка сброса: ' + error.message);
+                }
+            }
+        }
+
+        // Автоматическая вставка текущей даты
+        document.addEventListener('DOMContentLoaded', function() {
+            const today = new Date();
+            const dateString = today.toLocaleDateString('ru-RU', {
+                day: '2-digit',
+                month: '2-digit', 
+                year: 'numeric'
+            });
+            
+            // Устанавливаем текущую дату в поле по умолчанию при его появлении
+            document.addEventListener('input', function(e) {
+                if (e.target.id === 'shipment_date' && !e.target.value) {
+                    e.target.value = dateString;
+                }
+            });
+        });
+    </script>
+</body>
+</html>
