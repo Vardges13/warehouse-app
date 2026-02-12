@@ -562,6 +562,10 @@ async def step3_extract_markings():
                     "comment": "Фото нечитаемо"
                 }
             else:
+                # Пауза между вызовами Gemini API (rate limit)
+                if i > 0:
+                    import time as _time
+                    _time.sleep(2)
                 marking_info = assistant.extract_marking_from_photo(photo_data["path"])
                 marking_info["filename"] = photo_data["filename"]
                 marking_info["index"] = i
