@@ -228,35 +228,81 @@ class WarehouseAssistant:
     def parse_excel_specification(self, file_path: str) -> List[Dict]:
         """Парсинг спецификации из Excel"""
         try:
+            # Пробуем разные варианты чтения (с заголовком и без)
             df = pd.read_excel(file_path)
+            print(f"[SPEC] Columns: {list(df.columns)}")
+            print(f"[SPEC] First rows:\n{df.head()}")
             
-            # Ищем колонки с артикулами и количеством
+            # Расширенный поиск колонок
             articles_col = None
             quantity_col = None
             name_col = None
             
+            article_keywords = ['артикул', 'код', 'article', 'арт', 'номер', 'марк', 'обозначение', 'позиц', 'id', '№']
+            quantity_keywords = ['количество', 'кол-во', 'кол.', 'qty', 'quantity', 'шт', 'count', 'объем', 'план']
+            name_keywords = ['наименование', 'название', 'name', 'описание', 'изделие', 'продукц', 'товар', 'позиция']
+            
             for col in df.columns:
-                col_lower = str(col).lower()
-                if any(word in col_lower for word in ['артикул', 'код', 'article']):
+                col_lower = str(col).lower().strip()
+                if not articles_col and any(word in col_lower for word in article_keywords):
                     articles_col = col
-                elif any(word in col_lower for word in ['количество', 'кол-во', 'qty', 'quantity']):
+                if not quantity_col and any(word in col_lower for word in quantity_keywords):
                     quantity_col = col
-                elif any(word in col_lower for word in ['наименование', 'название', 'name']):
+                if not name_col and any(word in col_lower for word in name_keywords):
                     name_col = col
             
+            # Если не нашли — пробуем по индексу (первая текстовая = наименование/артикул, первая числовая = количество)
             if not articles_col or not quantity_col:
-                raise ValueError("Не найдены колонки с артикулами или количеством")
+                print(f"[SPEC] Колонки не найдены по ключевым словам, пробуем по типам данных")
+                for col in df.columns:
+                    if df[col].dtype == 'object' and not name_col:
+                        name_col = col
+                    elif df[col].dtype == 'object' and not articles_col:
+                        articles_col = col
+                    elif df[col].dtype in ['int64', 'float64'] and not quantity_col:
+                        quantity_col = col
+            
+            # Если артикул не найден — используем наименование как артикул
+            if not articles_col and name_col:
+                articles_col = name_col
+            
+            print(f"[SPEC] Found: articles={articles_col}, quantity={quantity_col}, name={name_col}")
+            
+            if not quantity_col:
+                # Последний вариант — берём все строки как есть
+                specification = []
+                for idx, row in df.iterrows():
+                    vals = [str(v).strip() for v in row.values if pd.notna(v) and str(v).strip()]
+                    if vals:
+                        specification.append({
+                            "article": vals[0] if len(vals) > 0 else "",
+                            "quantity": 1,
+                            "name": vals[1] if len(vals) > 1 else vals[0]
+                        })
+                print(f"[SPEC] Fallback parse: {len(specification)} items")
+                return specification
             
             specification = []
             for _, row in df.iterrows():
-                if pd.notna(row[articles_col]) and pd.notna(row[quantity_col]):
+                art_val = row[articles_col] if articles_col else None
+                qty_val = row[quantity_col] if quantity_col else None
+                name_val = row[name_col] if name_col else None
+                
+                if pd.notna(qty_val):
+                    try:
+                        qty = int(float(qty_val))
+                    except (ValueError, TypeError):
+                        qty = 1
+                    
                     item = {
-                        "article": str(row[articles_col]).strip(),
-                        "quantity": int(row[quantity_col]),
-                        "name": str(row[name_col]).strip() if name_col else ""
+                        "article": str(art_val).strip() if pd.notna(art_val) else "",
+                        "quantity": qty,
+                        "name": str(name_val).strip() if name_col and pd.notna(name_val) else str(art_val).strip() if pd.notna(art_val) else ""
                     }
-                    specification.append(item)
+                    if item["article"] or item["name"]:
+                        specification.append(item)
             
+            print(f"[SPEC] Parsed: {len(specification)} items")
             return specification
             
         except Exception as e:
