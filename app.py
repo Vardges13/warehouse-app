@@ -203,8 +203,9 @@ class WarehouseAssistant:
                     break
                 except Exception as retry_err:
                     if '429' in str(retry_err) and _attempt < 2:
-                        print(f"[GEMINI] Rate limited, retry {_attempt+1} in {(_attempt+1)*5}s...")
-                        _time.sleep((_attempt + 1) * 5)
+                        wait = (_attempt + 1) * 10
+                        print(f"[GEMINI] Rate limited, retry {_attempt+1} in {wait}s...")
+                        _time.sleep(wait)
                     else:
                         raise retry_err
             
@@ -279,7 +280,7 @@ class WarehouseAssistant:
                 "article": None,
                 "dimensions": None,
                 "readable": False,
-                "comment": f"Маркировка не читается",
+                "comment": f"Ошибка: {str(e)[:100]}" if '429' not in str(e) else "API перегружен, попробуйте позже",
                 "_debug_error": f"{type(e).__name__}: {str(e)[:200]}",
                 "demo_mode": False
             }
@@ -565,7 +566,7 @@ async def step3_extract_markings():
                 # Пауза между вызовами Gemini API (rate limit)
                 if i > 0:
                     import time as _time
-                    _time.sleep(2)
+                    _time.sleep(4)
                 marking_info = assistant.extract_marking_from_photo(photo_data["path"])
                 marking_info["filename"] = photo_data["filename"]
                 marking_info["index"] = i
