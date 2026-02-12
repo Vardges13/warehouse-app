@@ -178,24 +178,35 @@ class WarehouseAssistant:
 
 ВАЖНО: даже если текст частично виден — прочитай что можешь. Отвечай ТОЛЬКО JSON."""
 
-            # Вызов нового Google GenAI API
-            response = self.client.models.generate_content(
-                model='gemini-2.0-flash',
-                contents=[
-                    {
-                        "role": "user",
-                        "parts": [
-                            {"text": prompt},
+            # Вызов нового Google GenAI API с retry
+            import time as _time
+            response = None
+            for _attempt in range(3):
+                try:
+                    response = self.client.models.generate_content(
+                        model='gemini-2.0-flash',
+                        contents=[
                             {
-                                "inline_data": {
-                                    "mime_type": mime_type,
-                                    "data": img_base64
-                                }
+                                "role": "user",
+                                "parts": [
+                                    {"text": prompt},
+                                    {
+                                        "inline_data": {
+                                            "mime_type": mime_type,
+                                            "data": img_base64
+                                        }
+                                    }
+                                ]
                             }
                         ]
-                    }
-                ]
-            )
+                    )
+                    break
+                except Exception as retry_err:
+                    if '429' in str(retry_err) and _attempt < 2:
+                        print(f"[GEMINI] Rate limited, retry {_attempt+1} in {(_attempt+1)*5}s...")
+                        _time.sleep((_attempt + 1) * 5)
+                    else:
+                        raise retry_err
             
             # Парсим ответ JSON
             try:
@@ -209,6 +220,11 @@ class WarehouseAssistant:
                 result_json = json.loads(response_text)
                 
                 print(f"[GEMINI] Parsed JSON: {result_json}")
+                # Нормализуем латиницу→кириллицу в article
+                _lat2cyr = str.maketrans('AaBbCcEeHhKkMmOoPpTtXx', 'АаВвСсЕеНнКкМмОоРрТтХх')
+                for key in ('article', 'name'):
+                    if result_json.get(key):
+                        result_json[key] = result_json[key].translate(_lat2cyr)
                 # Проверяем наличие ошибки
                 if result_json.get('error'):
                     return {
