@@ -46,7 +46,7 @@ os.makedirs("uploads", exist_ok=True)
 os.makedirs("output", exist_ok=True)
 
 # Gemini API инициализация
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "AIzaSyCcNkbZp447GjuW8xjykrJ_N-r_3g10dhY")
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "AIzaSyCCenBvV8ZVWXwahKHqZvllUl7v4Uhsfos")
 client = genai.Client(api_key=GEMINI_API_KEY)
 
 # Глобальное хранилище данных сессии
@@ -157,27 +157,30 @@ class WarehouseAssistant:
                     img_base64 = base64.b64encode(f.read()).decode()
             
             # Промпт для распознавания маркировки
-            prompt = """Распознай маркировку на фото. 
-Верни результат СТРОГО в формате JSON:
+            prompt = """На фото — маркировка изделия на производстве/складе. 
+Это может быть бирка, наклейка, надпись маркером или краской на изделии.
+Маркировка обычно содержит код вида "Ка.перф1", "Ка.перф45", "КЛЦ-2" и т.п.
+
+Найди и прочитай маркировку. Верни JSON:
 {
-    "name": "наименование товара",
-    "article": "артикул",
-    "dimensions": "размеры"
+    "name": "полный текст маркировки как написано",
+    "article": "код маркировки (например Ка.перф45)",
+    "dimensions": "размеры если указаны, иначе null"
 }
 
-Если маркировка не читается или фото нечеткое, верни:
+Если на фото действительно НЕВОЗМОЖНО прочитать ни одного символа:
 {
     "name": null,
-    "article": null,
+    "article": null, 
     "dimensions": null,
-    "error": "описание проблемы"
+    "error": "причина"
 }
 
-Важно: отвечай ТОЛЬКО JSON без дополнительного текста."""
+ВАЖНО: даже если текст частично виден — прочитай что можешь. Отвечай ТОЛЬКО JSON."""
 
             # Вызов нового Google GenAI API
             response = self.client.models.generate_content(
-                model='gemini-2.0-flash-exp',
+                model='gemini-2.0-flash',
                 contents=[
                     {
                         "role": "user",
@@ -197,8 +200,15 @@ class WarehouseAssistant:
             # Парсим ответ JSON
             try:
                 response_text = response.candidates[0].content.parts[0].text.strip()
+                print(f"[GEMINI] Raw response for {image_path}: {response_text[:200]}")
+                # Убираем markdown обёртку если есть
+                if response_text.startswith('```'):
+                    response_text = response_text.strip('`').strip()
+                    if response_text.startswith('json'):
+                        response_text = response_text[4:].strip()
                 result_json = json.loads(response_text)
                 
+                print(f"[GEMINI] Parsed JSON: {result_json}")
                 # Проверяем наличие ошибки
                 if result_json.get('error'):
                     return {
@@ -253,7 +263,8 @@ class WarehouseAssistant:
                 "article": None,
                 "dimensions": None,
                 "readable": False,
-                "comment": f"Ошибка API: {str(e)[:100]}",
+                "comment": f"Маркировка не читается",
+                "_debug_error": f"{type(e).__name__}: {str(e)[:200]}",
                 "demo_mode": False
             }
     
