@@ -316,7 +316,7 @@
                     showStep1Results(result);
                     await processStep2();
                 } else {
-                    showStepResults('Шаг 1: Проверка файлов', result, false);
+                    showError(result.error || 'Ошибка проверки файлов');
                 }
             } catch (error) {
                 showError('Ошибка проверки файлов: ' + error.message);
