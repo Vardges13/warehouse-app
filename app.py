@@ -254,15 +254,16 @@ async def upload_files(
             print(f"[UPLOAD] template saved: {templ_path} ({len(content)} bytes)")
         
         # Обработка фотографий
+        print(f"[UPLOAD] photos count: {len(photos)}, filenames: {[p.filename for p in photos]}")
         for i, photo in enumerate(photos):
             if photo.filename:
-                # Проверка типа файла по расширению
-                filename_lower = photo.filename.lower()
-                if not any(filename_lower.endswith(ext) for ext in ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.tiff', '.webp']):
+                content = await photo.read()
+                if len(content) == 0:
+                    print(f"[UPLOAD] photo {i} empty, skip")
                     continue
                 
-                content = await photo.read()
-                photo_path = f"uploads/photo_{i}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.jpg"
+                ext = os.path.splitext(photo.filename)[1] or '.jpg'
+                photo_path = f"uploads/photo_{i}_{datetime.now().strftime('%Y%m%d_%H%M%S')}{ext}"
                 with open(photo_path, "wb") as f:
                     f.write(content)
                 
