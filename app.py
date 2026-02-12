@@ -946,10 +946,11 @@ async def generate_updated_specification(comparison, final_params):
             for col_idx, cell in enumerate(ws[row], 1):
                 if cell.value:
                     value_lower = str(cell.value).lower()
-                    if any(word in value_lower for word in ['артикул', 'код']):
+                    if any(word in value_lower for word in ['артикул', 'код', 'маркировка', 'марк']):
                         article_col = col_idx
-                    elif any(word in value_lower for word in ['отгружен', 'отправлен']):
-                        shipped_col = col_idx
+                    elif any(word in value_lower for word in ['отгружен', 'отправлен', 'отгрузка']):
+                        if not shipped_col:  # берём первую колонку отгрузки
+                            shipped_col = col_idx
                     elif any(word in value_lower for word in ['дата']):
                         date_col = col_idx
         
@@ -968,6 +969,9 @@ async def generate_updated_specification(comparison, final_params):
         
         # Красный фон для пересорта
         red_fill = PatternFill(start_color="FFFF0000", end_color="FFFF0000", fill_type="solid")
+        
+        if not article_col:
+            raise Exception("Не найдена колонка маркировки/артикула в спецификации")
         
         # Обновление данных
         for row_idx in range(2, ws.max_row + 1):
