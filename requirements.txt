@@ -4,6 +4,7 @@ python-multipart
 jinja2
 openpyxl
 pillow
+pillow-heif
 aiofiles
 pandas
 google-genai

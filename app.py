@@ -23,6 +23,14 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.requests import Request
 from openpyxl import load_workbook, Workbook
 from openpyxl.styles import PatternFill
+
+# Регистрируем HEIC поддержку если доступна
+try:
+    from pillow_heif import register_heif_opener
+    register_heif_opener()
+    print("[INIT] HEIC support enabled")
+except ImportError:
+    print("[INIT] pillow-heif not available, HEIC will be sent raw to Gemini")
 from openpyxl.utils import get_column_letter
 from PIL import Image
 # import magic
@@ -99,6 +107,16 @@ class WarehouseAssistant:
                 }
                 
         except Exception as e:
+            # HEIC и другие форматы — не можем проверить качество, но считаем читаемыми для Gemini
+            ext = os.path.splitext(image_path)[1].lower()
+            if ext in ['.heic', '.heif', '.webp', '.tiff', '.raw', '.cr2', '.nef']:
+                return {
+                    "status": "✅",
+                    "readable": True,
+                    "issues": [],
+                    "resolution": "неизвестно (формат не поддерживает превью)",
+                    "brightness": 0
+                }
             return {
                 "status": "❌",
                 "readable": False,
@@ -110,19 +128,33 @@ class WarehouseAssistant:
     def extract_marking_from_photo(self, image_path: str) -> Dict[str, Any]:
         """Извлечение маркировки через Google GenAI Vision"""
         try:
-            # Загружаем и подготавливаем изображение
-            with Image.open(image_path) as img:
-                # Конвертируем в RGB если необходимо
-                if img.mode != 'RGB':
-                    img = img.convert('RGB')
-                
-                # Конвертируем изображение в base64
+            import base64
+            
+            # Определяем mime type
+            ext = os.path.splitext(image_path)[1].lower()
+            mime_map = {
+                '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg',
+                '.png': 'image/png', '.gif': 'image/gif',
+                '.webp': 'image/webp', '.bmp': 'image/bmp',
+                '.heic': 'image/heic', '.heif': 'image/heif',
+                '.tiff': 'image/tiff', '.tif': 'image/tiff',
+            }
+            mime_type = mime_map.get(ext, 'image/jpeg')
+            
+            # Пробуем конвертировать в JPEG через Pillow, если не HEIC
+            try:
                 from io import BytesIO
-                import base64
-                
-                img_byte_arr = BytesIO()
-                img.save(img_byte_arr, format='JPEG', quality=90)
-                img_base64 = base64.b64encode(img_byte_arr.getvalue()).decode()
+                with Image.open(image_path) as img:
+                    if img.mode != 'RGB':
+                        img = img.convert('RGB')
+                    img_byte_arr = BytesIO()
+                    img.save(img_byte_arr, format='JPEG', quality=85)
+                    img_base64 = base64.b64encode(img_byte_arr.getvalue()).decode()
+                    mime_type = 'image/jpeg'
+            except Exception:
+                # HEIC или другой формат — отправляем raw
+                with open(image_path, 'rb') as f:
+                    img_base64 = base64.b64encode(f.read()).decode()
             
             # Промпт для распознавания маркировки
             prompt = """Распознай маркировку на фото. 
@@ -153,7 +185,7 @@ class WarehouseAssistant:
                             {"text": prompt},
                             {
                                 "inline_data": {
-                                    "mime_type": "image/jpeg",
+                                    "mime_type": mime_type,
                                     "data": img_base64
                                 }
                             }
