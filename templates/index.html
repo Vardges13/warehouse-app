@@ -289,6 +289,11 @@
                     body: formData
                 });
                 
+                if (!response.ok) {
+                    const err = await response.json().catch(() => ({}));
+                    showError(err.detail || 'Ошибка загрузки файлов');
+                    return;
+                }
                 const result = await response.json();
                 
                 if (result.success) {
@@ -309,6 +314,11 @@
                     method: 'POST'
                 });
                 
+                if (!response.ok) {
+                    const err = await response.json().catch(() => ({}));
+                    showError(err.detail || 'Ошибка проверки файлов');
+                    return;
+                }
                 const result = await response.json();
                 
                 if (result.success) {
@@ -316,7 +326,7 @@
                     showStep1Results(result);
                     await processStep2();
                 } else {
-                    showError(result.error || 'Ошибка проверки файлов');
+                    showError(result.missing ? 'Не загружены: ' + result.missing.join(', ') : 'Ошибка проверки файлов');
                 }
             } catch (error) {
                 showError('Ошибка проверки файлов: ' + error.message);

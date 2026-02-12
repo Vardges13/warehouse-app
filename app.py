@@ -225,6 +225,7 @@ async def upload_files(
 ):
     """Загрузка файлов"""
     try:
+        print(f"[UPLOAD] spec={specification}, template={template}, photos={len(photos) if photos else 0}")
         result = {"success": True, "files": {}}
         
         # Очистка предыдущих данных
@@ -235,18 +236,22 @@ async def upload_files(
         # Обработка спецификации
         if specification and specification.filename:
             spec_path = f"uploads/specification_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+            content = await specification.read()
             with open(spec_path, "wb") as f:
-                shutil.copyfileobj(specification.file, f)
+                f.write(content)
             session_data["specification"] = spec_path
             result["files"]["specification"] = specification.filename
+            print(f"[UPLOAD] spec saved: {spec_path} ({len(content)} bytes)")
         
         # Обработка шаблона накладной
         if template and template.filename:
             templ_path = f"uploads/template_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+            content = await template.read()
             with open(templ_path, "wb") as f:
-                shutil.copyfileobj(template.file, f)
+                f.write(content)
             session_data["template"] = templ_path
             result["files"]["template"] = template.filename
+            print(f"[UPLOAD] template saved: {templ_path} ({len(content)} bytes)")
         
         # Обработка фотографий
         for i, photo in enumerate(photos):
