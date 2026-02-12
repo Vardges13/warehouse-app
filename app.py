@@ -417,7 +417,7 @@ async def step2_check_photo_quality():
             quality_info["index"] = i
             photo_quality.append(quality_info)
         
-        unreadable_count = sum(1 for q in photo_quality if not q["readable"])
+        unreadable_count = sum(1 for q in photo_quality if not q.get("readable", False))
         
         result = {
             "success": True,
@@ -446,7 +446,7 @@ async def step3_extract_markings():
         for i, photo_data in enumerate(session_data["photos"]):
             # Пропускаем нечитаемые фото
             quality_info = session_data["results"]["photo_quality"]["photos"][i]
-            if not quality_info["readable"]:
+            if not quality_info.get("readable", False):
                 marking_info = {
                     "filename": photo_data["filename"],
                     "index": i,
@@ -462,7 +462,7 @@ async def step3_extract_markings():
                 marking_info["index"] = i
                 marking_info["comment"] = ""
                 
-                if not marking_info["readable"]:
+                if not marking_info.get("readable", False):
                     marking_info["comment"] = "Маркировка не читается"
                 elif marking_info.get("error"):
                     marking_info["comment"] = marking_info["error"]
@@ -514,14 +514,14 @@ async def step4_count_verification():
         articles_found = []
         
         for marking in markings:
-            if marking["article"]:
+            if marking.get("article"):
                 article = str(marking["article"]).strip()
                 count_by_article[article] = count_by_article.get(article, 0) + 1
                 articles_found.append(article)
         
         # Итоговые числа
         total_photos = len(markings)
-        readable_markings = sum(1 for m in markings if m["readable"])
+        readable_markings = sum(1 for m in markings if m.get("readable", m.get("status") == "✅"))
         unique_articles = len(set(articles_found))
         
         result = {
@@ -569,7 +569,7 @@ async def step5_compare_specification():
         actual_count = {}
         
         for marking in markings:
-            if marking["article"] and marking["readable"]:
+            if marking["article"] and marking.get("readable", False):
                 article = str(marking["article"]).strip()
                 actual_count[article] = actual_count.get(article, 0) + 1
         
