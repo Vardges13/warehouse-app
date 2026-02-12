@@ -38,7 +38,9 @@ os.makedirs("uploads", exist_ok=True)
 os.makedirs("output", exist_ok=True)
 
 # Gemini API инициализация
-GEMINI_API_KEY = "AIzaSyCcNkbZp447GjuW8xjykrJ_N-r_3g10dhY"
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
+if not GEMINI_API_KEY:
+    raise ValueError("❌ GEMINI_API_KEY не установлен в переменных окружения")
 client = genai.Client(api_key=GEMINI_API_KEY)
 
 # Глобальное хранилище данных сессии
