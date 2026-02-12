@@ -69,16 +69,19 @@ class WarehouseAssistant:
                 if width < 300 or height < 300:
                     quality_issues.append("Низкое разрешение")
                 
-                # Проверка на размытость через вариацию
-                img_gray = img.convert('L')
-                img_array = list(img_gray.getdata())
-                variance = sum([(x - sum(img_array)/len(img_array))**2 for x in img_array]) / len(img_array)
+                # Быстрая проверка: ресайз до маленького размера
+                thumb = img.copy()
+                thumb.thumbnail((200, 200))
+                img_gray = thumb.convert('L')
+                pixels = list(img_gray.getdata())
+                n = len(pixels)
+                avg_brightness = sum(pixels) / n
+                variance = sum((x - avg_brightness) ** 2 for x in pixels) / n
                 
-                if variance < 1000:  # Эмпирический порог
+                if variance < 500:
                     quality_issues.append("Изображение размыто")
                 
                 # Проверка на пересвет/недосвет
-                avg_brightness = sum(img_array) / len(img_array)
                 if avg_brightness > 240:
                     quality_issues.append("Пересвет")
                 elif avg_brightness < 15:
