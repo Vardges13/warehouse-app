@@ -212,7 +212,7 @@
         let currentStep = 1;
         
         // Функция fetch с таймаутом
-        async function fetchWithTimeout(url, options = {}, timeout = 60000) {
+        async function fetchWithTimeout(url, options = {}, timeout = 120000) {
             const controller = new AbortController();
             const id = setTimeout(() => controller.abort(), timeout);
             
@@ -303,7 +303,7 @@
             });
 
             try {
-                showLoading('Загрузка файлов...');
+                console.log('[STEP] Uploading files...'); showLoading('Загрузка файлов...');
                 
                 const response = await fetchWithTimeout('/upload-files/', {
                     method: 'POST',
@@ -329,7 +329,7 @@
 
         async function processStep1() {
             try {
-                showLoading('Проверка файлов...');
+                console.log('[STEP] Step1 check files...'); showLoading('Проверка файлов...');
                 
                 const response = await fetchWithTimeout('/step1-check-files/', {
                     method: 'POST'
@@ -356,7 +356,7 @@
 
         async function processStep2() {
             try {
-                showLoading('Анализ качества фотографий...');
+                console.log('[STEP] Step2 photo quality...'); showLoading('Анализ качества фотографий...');
                 
                 const response = await fetchWithTimeout('/step2-check-photo-quality/', {
                     method: 'POST'
@@ -384,7 +384,7 @@
 
         async function processStep3() {
             try {
-                showLoading('Извлечение маркировок через Gemini Vision...');
+                console.log('[STEP] Step3 Gemini Vision...'); showLoading('Извлечение маркировок через Gemini Vision...');
                 
                 const response = await fetchWithTimeout('/step3-extract-markings/', {
                     method: 'POST'
@@ -412,7 +412,7 @@
 
         async function processStep4() {
             try {
-                showLoading('Двойной пересчёт изделий...');
+                console.log('[STEP] Step4 count...'); showLoading('Двойной пересчёт изделий...');
                 
                 const response = await fetchWithTimeout('/step4-count-verification/', {
                     method: 'POST'
@@ -440,7 +440,7 @@
 
         async function processStep5() {
             try {
-                showLoading('Сопоставление со спецификацией...');
+                console.log('[STEP] Step5 compare...'); showLoading('Сопоставление со спецификацией...');
                 
                 const response = await fetchWithTimeout('/step5-compare-specification/', {
                     method: 'POST'
