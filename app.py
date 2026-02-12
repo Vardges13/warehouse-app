@@ -15,7 +15,7 @@ from typing import List, Dict, Any, Optional
 from io import BytesIO
 import base64
 
-import google.generativeai as genai
+import google.genai as genai
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.responses import HTMLResponse, FileResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
@@ -39,7 +39,7 @@ os.makedirs("output", exist_ok=True)
 
 # Gemini API инициализация
 GEMINI_API_KEY = "AIzaSyCcNkbZp447GjuW8xjykrJ_N-r_3g10dhY"
-genai.configure(api_key=GEMINI_API_KEY)
+client = genai.Client(api_key=GEMINI_API_KEY)
 
 # Глобальное хранилище данных сессии
 session_data = {
@@ -54,7 +54,7 @@ class WarehouseAssistant:
     """Главный класс складского ассистента"""
     
     def __init__(self):
-        self.model = genai.GenerativeModel('gemini-2.0-flash')
+        self.client = client
         
     def check_image_quality(self, image_path: str) -> Dict[str, Any]:
         """Проверка качества фотографии"""
@@ -108,7 +108,7 @@ class WarehouseAssistant:
             }
     
     def extract_marking_from_photo(self, image_path: str) -> Dict[str, Any]:
-        """Извлечение маркировки через Gemini Vision API"""
+        """Извлечение маркировки через Google GenAI Vision"""
         try:
             # Загружаем и подготавливаем изображение
             with Image.open(image_path) as img:
@@ -116,12 +116,13 @@ class WarehouseAssistant:
                 if img.mode != 'RGB':
                     img = img.convert('RGB')
                 
-                # Сохраняем во временный файл для передачи в Gemini
-                temp_path = image_path + "_temp.jpg"
-                img.save(temp_path, 'JPEG', quality=90)
-            
-            # Загружаем изображение в Gemini
-            image_file = genai.upload_file(temp_path)
+                # Конвертируем изображение в base64
+                from io import BytesIO
+                import base64
+                
+                img_byte_arr = BytesIO()
+                img.save(img_byte_arr, format='JPEG', quality=90)
+                img_base64 = base64.b64encode(img_byte_arr.getvalue()).decode()
             
             # Промпт для распознавания маркировки
             prompt = """Распознай маркировку на фото. 
@@ -142,18 +143,29 @@ class WarehouseAssistant:
 
 Важно: отвечай ТОЛЬКО JSON без дополнительного текста."""
 
-            # Вызов Gemini API
-            response = self.model.generate_content([prompt, image_file])
-            
-            # Очищаем временный файл
-            try:
-                os.remove(temp_path)
-            except:
-                pass  # Игнорируем ошибку удаления временного файла
+            # Вызов нового Google GenAI API
+            response = self.client.models.generate_content(
+                model='gemini-2.0-flash-exp',
+                contents=[
+                    {
+                        "role": "user",
+                        "parts": [
+                            {"text": prompt},
+                            {
+                                "inline_data": {
+                                    "mime_type": "image/jpeg",
+                                    "data": img_base64
+                                }
+                            }
+                        ]
+                    }
+                ]
+            )
             
             # Парсим ответ JSON
             try:
-                result_json = json.loads(response.text.strip())
+                response_text = response.candidates[0].content.parts[0].text.strip()
+                result_json = json.loads(response_text)
                 
                 # Проверяем наличие ошибки
                 if result_json.get('error'):
@@ -187,7 +199,7 @@ class WarehouseAssistant:
                     "article": result_json.get('article'),
                     "dimensions": result_json.get('dimensions'),
                     "readable": readable,
-                    "confidence": "gemini-vision",
+                    "confidence": "gemini-vision-2024",
                     "demo_mode": False
                 }
                 
