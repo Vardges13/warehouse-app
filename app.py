@@ -15,7 +15,7 @@ from typing import List, Dict, Any, Optional
 from io import BytesIO
 import base64
 
-# import google.generativeai as genai
+import google.generativeai as genai
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.responses import HTMLResponse, FileResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
@@ -39,7 +39,7 @@ os.makedirs("output", exist_ok=True)
 
 # Gemini API инициализация
 GEMINI_API_KEY = "AIzaSyCcNkbZp447GjuW8xjykrJ_N-r_3g10dhY"
-# genai.configure(api_key=GEMINI_API_KEY)
+genai.configure(api_key=GEMINI_API_KEY)
 
 # Глобальное хранилище данных сессии
 session_data = {
@@ -54,8 +54,7 @@ class WarehouseAssistant:
     """Главный класс складского ассистента"""
     
     def __init__(self):
-        # self.model = genai.GenerativeModel('gemini-2.0-flash-exp')
-        self.model = None
+        self.model = genai.GenerativeModel('gemini-2.0-flash')
         
     def check_image_quality(self, image_path: str) -> Dict[str, Any]:
         """Проверка качества фотографии"""
@@ -109,32 +108,110 @@ class WarehouseAssistant:
             }
     
     def extract_marking_from_photo(self, image_path: str) -> Dict[str, Any]:
-        """Извлечение маркировки через Gemini Vision (DEMO MODE)"""
-        import os
-        filename = os.path.basename(image_path)
-        
-        # DEMO MODE: возвращаем тестовые данные
-        demo_data = [
-            {"name": "Панель ГКЛ Knauf", "article": "KN-001", "dimensions": "1200x2500 мм"},
-            {"name": "Лист ГВЛ", "article": "GVL-102", "dimensions": "1200x2600 мм"}, 
-            {"name": "Профиль UD-27", "article": "UD-27-3000", "dimensions": "27x28x3000 мм"},
-            {"name": "Саморез по металлу", "article": "SM-3.5x25", "dimensions": None},
-        ]
-        
-        # Выбираем данные по индексу файла  
-        import hashlib
-        index = int(hashlib.md5(filename.encode()).hexdigest(), 16) % len(demo_data)
-        demo_item = demo_data[index]
-        
-        return {
-            "status": "✅",
-            "name": demo_item["name"],
-            "article": demo_item["article"], 
-            "dimensions": demo_item["dimensions"],
-            "confidence": "demo",
-            "readable": True,
-            "demo_mode": True
-        }
+        """Извлечение маркировки через Gemini Vision API"""
+        try:
+            # Загружаем и подготавливаем изображение
+            with Image.open(image_path) as img:
+                # Конвертируем в RGB если необходимо
+                if img.mode != 'RGB':
+                    img = img.convert('RGB')
+                
+                # Сохраняем во временный файл для передачи в Gemini
+                temp_path = image_path + "_temp.jpg"
+                img.save(temp_path, 'JPEG', quality=90)
+            
+            # Загружаем изображение в Gemini
+            image_file = genai.upload_file(temp_path)
+            
+            # Промпт для распознавания маркировки
+            prompt = """Распознай маркировку на фото. 
+Верни результат СТРОГО в формате JSON:
+{
+    "name": "наименование товара",
+    "article": "артикул",
+    "dimensions": "размеры"
+}
+
+Если маркировка не читается или фото нечеткое, верни:
+{
+    "name": null,
+    "article": null,
+    "dimensions": null,
+    "error": "описание проблемы"
+}
+
+Важно: отвечай ТОЛЬКО JSON без дополнительного текста."""
+
+            # Вызов Gemini API
+            response = self.model.generate_content([prompt, image_file])
+            
+            # Очищаем временный файл
+            try:
+                os.remove(temp_path)
+            except:
+                pass  # Игнорируем ошибку удаления временного файла
+            
+            # Парсим ответ JSON
+            try:
+                result_json = json.loads(response.text.strip())
+                
+                # Проверяем наличие ошибки
+                if result_json.get('error'):
+                    return {
+                        "status": "❌",
+                        "name": None,
+                        "article": None,
+                        "dimensions": None,
+                        "readable": False,
+                        "comment": result_json['error'],
+                        "demo_mode": False
+                    }
+                
+                # Проверяем полноту данных
+                has_name = result_json.get('name') is not None
+                has_article = result_json.get('article') is not None
+                
+                if has_name and has_article:
+                    status = "✅"
+                    readable = True
+                elif has_article:
+                    status = "⚠️"
+                    readable = True
+                else:
+                    status = "❌"
+                    readable = False
+                
+                return {
+                    "status": status,
+                    "name": result_json.get('name'),
+                    "article": result_json.get('article'),
+                    "dimensions": result_json.get('dimensions'),
+                    "readable": readable,
+                    "confidence": "gemini-vision",
+                    "demo_mode": False
+                }
+                
+            except json.JSONDecodeError:
+                return {
+                    "status": "❌",
+                    "name": None,
+                    "article": None,
+                    "dimensions": None,
+                    "readable": False,
+                    "comment": "Ошибка парсинга ответа Gemini",
+                    "demo_mode": False
+                }
+                
+        except Exception as e:
+            return {
+                "status": "❌",
+                "name": None,
+                "article": None,
+                "dimensions": None,
+                "readable": False,
+                "comment": f"Ошибка API: {str(e)[:100]}",
+                "demo_mode": False
+            }
     
     def parse_excel_specification(self, file_path: str) -> List[Dict]:
         """Парсинг спецификации из Excel"""
@@ -408,6 +485,10 @@ async def step3_extract_markings():
 async def step4_count_verification():
     """Шаг 4: Двойной пересчет изделий"""
     try:
+        # Проверяем наличие данных от предыдущего шага
+        if "markings" not in session_data.get("results", {}) or "markings" not in session_data["results"]["markings"]:
+            raise HTTPException(status_code=400, detail="Отсутствуют данные маркировок. Выполните шаг 3.")
+        
         markings = session_data["results"]["markings"]["markings"]
         
         # Первый подсчет - по статусу
@@ -460,6 +541,14 @@ async def step4_count_verification():
 async def step5_compare_specification():
     """Шаг 5: Сопоставление со спецификацией"""
     try:
+        # Проверяем наличие спецификации
+        if not session_data.get("specification"):
+            raise HTTPException(status_code=400, detail="Отсутствует файл спецификации")
+        
+        # Проверяем наличие данных маркировок
+        if "markings" not in session_data.get("results", {}) or "markings" not in session_data["results"]["markings"]:
+            raise HTTPException(status_code=400, detail="Отсутствуют данные маркировок. Выполните шаг 3.")
+        
         # Парсинг спецификации
         specification = assistant.parse_excel_specification(session_data["specification"])
         
@@ -572,6 +661,16 @@ async def step6_final_questions(
 async def step7_generate_files():
     """Шаг 7: Генерация Excel файлов"""
     try:
+        # Проверяем наличие всех необходимых данных
+        if "comparison" not in session_data.get("results", {}) or "comparison" not in session_data["results"]["comparison"]:
+            raise HTTPException(status_code=400, detail="Отсутствуют данные сравнения. Выполните шаг 5.")
+        
+        if "final_params" not in session_data.get("results", {}):
+            raise HTTPException(status_code=400, detail="Отсутствуют финальные параметры. Выполните шаг 6.")
+        
+        if "markings" not in session_data.get("results", {}) or "markings" not in session_data["results"]["markings"]:
+            raise HTTPException(status_code=400, detail="Отсутствуют данные маркировок. Выполните шаг 3.")
+        
         # Получение данных
         comparison = session_data["results"]["comparison"]["comparison"]
         final_params = session_data["results"]["final_params"]
@@ -617,6 +716,10 @@ async def step7_generate_files():
 async def generate_filled_invoice(comparison, markings, final_params):
     """Генерация заполненной накладной"""
     try:
+        # Проверяем наличие шаблона
+        if not session_data.get("template") or not os.path.exists(session_data["template"]):
+            raise Exception("Отсутствует файл шаблона накладной")
+        
         # Загрузка шаблона накладной
         template_wb = load_workbook(session_data["template"])
         ws = template_wb.active

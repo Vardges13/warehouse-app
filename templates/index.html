@@ -210,6 +210,27 @@
         };
         
         let currentStep = 1;
+        
+        // Функция fetch с таймаутом
+        async function fetchWithTimeout(url, options = {}, timeout = 60000) {
+            const controller = new AbortController();
+            const id = setTimeout(() => controller.abort(), timeout);
+            
+            try {
+                const response = await fetch(url, {
+                    ...options,
+                    signal: controller.signal
+                });
+                clearTimeout(id);
+                return response;
+            } catch (error) {
+                clearTimeout(id);
+                if (error.name === 'AbortError') {
+                    throw new Error('Превышен таймаут запроса (60 сек)');
+                }
+                throw error;
+            }
+        }
 
         // Drag and drop handlers
         function dragOverHandler(event) {
@@ -284,7 +305,7 @@
             try {
                 showLoading('Загрузка файлов...');
                 
-                const response = await fetch('/upload-files/', {
+                const response = await fetchWithTimeout('/upload-files/', {
                     method: 'POST',
                     body: formData
                 });
@@ -296,7 +317,7 @@
                 }
                 const result = await response.json();
                 
-                if (result.success) {
+                if (result?.success) {
                     await processStep1();
                 } else {
                     showError('Ошибка загрузки файлов');
@@ -310,7 +331,7 @@
             try {
                 showLoading('Проверка файлов...');
                 
-                const response = await fetch('/step1-check-files/', {
+                const response = await fetchWithTimeout('/step1-check-files/', {
                     method: 'POST'
                 });
                 
@@ -321,12 +342,12 @@
                 }
                 const result = await response.json();
                 
-                if (result.success) {
+                if (result?.success) {
                     updateProgress(1);
                     showStep1Results(result);
                     await processStep2();
                 } else {
-                    showError(result.missing ? 'Не загружены: ' + result.missing.join(', ') : 'Ошибка проверки файлов');
+                    showError(result?.missing ? 'Не загружены: ' + result.missing.join(', ') : 'Ошибка проверки файлов');
                 }
             } catch (error) {
                 showError('Ошибка проверки файлов: ' + error.message);
@@ -337,17 +358,24 @@
             try {
                 showLoading('Анализ качества фотографий...');
                 
-                const response = await fetch('/step2-check-photo-quality/', {
+                const response = await fetchWithTimeout('/step2-check-photo-quality/', {
                     method: 'POST'
                 });
                 
+                if (!response.ok) {
+                    const err = await response.json().catch(() => ({}));
+                    showError(err.detail || 'Ошибка анализа качества фотографий');
+                    return;
+                }
+                
                 const result = await response.json();
                 
-                updateProgress(2);
-                showStep2Results(result);
-                
-                if (result.success) {
+                if (result?.success) {
+                    updateProgress(2);
+                    showStep2Results(result);
                     await processStep3();
+                } else {
+                    showError('Ошибка анализа качества фотографий');
                 }
             } catch (error) {
                 showError('Ошибка анализа качества: ' + error.message);
@@ -358,17 +386,24 @@
             try {
                 showLoading('Извлечение маркировок через Gemini Vision...');
                 
-                const response = await fetch('/step3-extract-markings/', {
+                const response = await fetchWithTimeout('/step3-extract-markings/', {
                     method: 'POST'
                 });
                 
+                if (!response.ok) {
+                    const err = await response.json().catch(() => ({}));
+                    showError(err.detail || 'Ошибка извлечения маркировок');
+                    return;
+                }
+                
                 const result = await response.json();
                 
-                updateProgress(3);
-                showStep3Results(result);
-                
-                if (result.success) {
+                if (result?.success) {
+                    updateProgress(3);
+                    showStep3Results(result);
                     await processStep4();
+                } else {
+                    showError('Ошибка извлечения маркировок');
                 }
             } catch (error) {
                 showError('Ошибка извлечения маркировок: ' + error.message);
@@ -379,17 +414,24 @@
             try {
                 showLoading('Двойной пересчёт изделий...');
                 
-                const response = await fetch('/step4-count-verification/', {
+                const response = await fetchWithTimeout('/step4-count-verification/', {
                     method: 'POST'
                 });
                 
+                if (!response.ok) {
+                    const err = await response.json().catch(() => ({}));
+                    showError(err.detail || 'Ошибка пересчёта изделий');
+                    return;
+                }
+                
                 const result = await response.json();
                 
-                updateProgress(4);
-                showStep4Results(result);
-                
-                if (result.success) {
+                if (result?.success) {
+                    updateProgress(4);
+                    showStep4Results(result);
                     await processStep5();
+                } else {
+                    showError('Ошибка пересчёта изделий');
                 }
             } catch (error) {
                 showError('Ошибка пересчёта: ' + error.message);
@@ -400,17 +442,24 @@
             try {
                 showLoading('Сопоставление со спецификацией...');
                 
-                const response = await fetch('/step5-compare-specification/', {
+                const response = await fetchWithTimeout('/step5-compare-specification/', {
                     method: 'POST'
                 });
                 
+                if (!response.ok) {
+                    const err = await response.json().catch(() => ({}));
+                    showError(err.detail || 'Ошибка сопоставления со спецификацией');
+                    return;
+                }
+                
                 const result = await response.json();
                 
-                updateProgress(5);
-                showStep5Results(result);
-                
-                if (result.success) {
+                if (result?.success) {
+                    updateProgress(5);
+                    showStep5Results(result);
                     showStep6Form();
+                } else {
+                    showError('Ошибка сопоставления со спецификацией');
                 }
             } catch (error) {
                 showError('Ошибка сопоставления: ' + error.message);
@@ -473,14 +522,20 @@
             try {
                 showLoading('Обработка параметров...');
                 
-                const response = await fetch('/step6-final-questions/', {
+                const response = await fetchWithTimeout('/step6-final-questions/', {
                     method: 'POST',
                     body: formData
                 });
                 
+                if (!response.ok) {
+                    const err = await response.json().catch(() => ({}));
+                    showError(err.detail || 'Ошибка обработки параметров');
+                    return;
+                }
+                
                 const result = await response.json();
                 
-                if (result.success) {
+                if (result?.success) {
                     await processStep7();
                 } else {
                     showError('Ошибка обработки параметров');
@@ -495,13 +550,19 @@
                 updateProgress(7);
                 showLoading('Генерация Excel файлов...');
                 
-                const response = await fetch('/step7-generate-files/', {
+                const response = await fetchWithTimeout('/step7-generate-files/', {
                     method: 'POST'
                 });
                 
+                if (!response.ok) {
+                    const err = await response.json().catch(() => ({}));
+                    showError(err.detail || 'Ошибка генерации файлов');
+                    return;
+                }
+                
                 const result = await response.json();
                 
-                if (result.success) {
+                if (result?.success) {
                     showStep7Results(result);
                 } else {
                     showError('Ошибка генерации файлов');
@@ -517,15 +578,15 @@
                     <h3 class="text-lg font-semibold mb-4 text-success">✅ Шаг 1: Файлы загружены успешно</h3>
                     <div class="grid grid-cols-3 gap-4 text-center">
                         <div class="p-4 bg-green-50 rounded-lg">
-                            <div class="text-2xl font-bold text-success">${result.files_count.specification}</div>
+                            <div class="text-2xl font-bold text-success">${result?.files_count?.specification || 0}</div>
                             <div class="text-sm text-gray-600">Спецификация</div>
                         </div>
                         <div class="p-4 bg-green-50 rounded-lg">
-                            <div class="text-2xl font-bold text-success">${result.files_count.template}</div>
+                            <div class="text-2xl font-bold text-success">${result?.files_count?.template || 0}</div>
                             <div class="text-sm text-gray-600">Шаблон</div>
                         </div>
                         <div class="p-4 bg-green-50 rounded-lg">
-                            <div class="text-2xl font-bold text-success">${result.files_count.photos}</div>
+                            <div class="text-2xl font-bold text-success">${result?.files_count?.photos || 0}</div>
                             <div class="text-sm text-gray-600">Фотографий</div>
                         </div>
                     </div>
@@ -535,13 +596,13 @@
         }
 
         function showStep2Results(result) {
-            const photosTable = result.photos.map(photo => `
-                <tr class="${photo.readable ? 'bg-green-50' : 'bg-red-50'}">
-                    <td class="px-4 py-2 border-b">${photo.filename}</td>
-                    <td class="px-4 py-2 border-b text-center text-xl">${photo.status}</td>
-                    <td class="px-4 py-2 border-b">${photo.resolution}</td>
-                    <td class="px-4 py-2 border-b">${photo.brightness}</td>
-                    <td class="px-4 py-2 border-b text-sm">${photo.issues.join(', ') || 'Нет проблем'}</td>
+            const photosTable = (result?.photos || []).map(photo => `
+                <tr class="${photo?.readable ? 'bg-green-50' : 'bg-red-50'}">
+                    <td class="px-4 py-2 border-b">${photo?.filename || 'Неизвестно'}</td>
+                    <td class="px-4 py-2 border-b text-center text-xl">${photo?.status || '❓'}</td>
+                    <td class="px-4 py-2 border-b">${photo?.resolution || 'Неизвестно'}</td>
+                    <td class="px-4 py-2 border-b">${photo?.brightness || '0'}</td>
+                    <td class="px-4 py-2 border-b text-sm">${(photo?.issues || []).join(', ') || 'Нет проблем'}</td>
                 </tr>
             `).join('');
             
@@ -550,15 +611,15 @@
                     <h3 class="text-lg font-semibold mb-4">📷 Шаг 2: Анализ качества фотографий</h3>
                     <div class="grid grid-cols-3 gap-4 text-center mb-6">
                         <div class="p-4 bg-blue-50 rounded-lg">
-                            <div class="text-2xl font-bold text-primary">${result.summary.total}</div>
+                            <div class="text-2xl font-bold text-primary">${result?.summary?.total || 0}</div>
                             <div class="text-sm text-gray-600">Всего фото</div>
                         </div>
                         <div class="p-4 bg-green-50 rounded-lg">
-                            <div class="text-2xl font-bold text-success">${result.summary.readable}</div>
+                            <div class="text-2xl font-bold text-success">${result?.summary?.readable || 0}</div>
                             <div class="text-sm text-gray-600">Читаемых</div>
                         </div>
                         <div class="p-4 bg-red-50 rounded-lg">
-                            <div class="text-2xl font-bold text-danger">${result.summary.unreadable}</div>
+                            <div class="text-2xl font-bold text-danger">${result?.summary?.unreadable || 0}</div>
                             <div class="text-sm text-gray-600">Нечитаемых</div>
                         </div>
                     </div>
@@ -585,13 +646,13 @@
         }
 
         function showStep3Results(result) {
-            const markingsTable = result.markings.map(marking => `
-                <tr class="${marking.status === '✅' ? 'bg-green-50' : marking.status === '⚠️' ? 'bg-yellow-50' : 'bg-red-50'}">
-                    <td class="px-4 py-2 border-b text-sm">${marking.filename}</td>
-                    <td class="px-4 py-2 border-b text-center text-xl">${marking.status}</td>
-                    <td class="px-4 py-2 border-b text-sm">${marking.name || '—'}</td>
-                    <td class="px-4 py-2 border-b text-sm font-mono">${marking.article || '—'}</td>
-                    <td class="px-4 py-2 border-b text-sm">${marking.comment || '—'}</td>
+            const markingsTable = (result?.markings || []).map(marking => `
+                <tr class="${marking?.status === '✅' ? 'bg-green-50' : marking?.status === '⚠️' ? 'bg-yellow-50' : 'bg-red-50'}">
+                    <td class="px-4 py-2 border-b text-sm">${marking?.filename || 'Неизвестно'}</td>
+                    <td class="px-4 py-2 border-b text-center text-xl">${marking?.status || '❓'}</td>
+                    <td class="px-4 py-2 border-b text-sm">${marking?.name || '—'}</td>
+                    <td class="px-4 py-2 border-b text-sm font-mono">${marking?.article || '—'}</td>
+                    <td class="px-4 py-2 border-b text-sm">${marking?.comment || '—'}</td>
                 </tr>
             `).join('');
             
@@ -600,19 +661,19 @@
                     <h3 class="text-lg font-semibold mb-4">🤖 Шаг 3: Извлечение маркировок (Gemini Vision)</h3>
                     <div class="grid grid-cols-4 gap-4 text-center mb-6">
                         <div class="p-4 bg-blue-50 rounded-lg">
-                            <div class="text-2xl font-bold text-primary">${result.summary.total}</div>
+                            <div class="text-2xl font-bold text-primary">${result?.summary?.total || 0}</div>
                             <div class="text-sm text-gray-600">Всего</div>
                         </div>
                         <div class="p-4 bg-green-50 rounded-lg">
-                            <div class="text-2xl font-bold text-success">${result.summary.extracted}</div>
+                            <div class="text-2xl font-bold text-success">${result?.summary?.extracted || 0}</div>
                             <div class="text-sm text-gray-600">Извлечено</div>
                         </div>
                         <div class="p-4 bg-yellow-50 rounded-lg">
-                            <div class="text-2xl font-bold text-warning">${result.summary.partial}</div>
+                            <div class="text-2xl font-bold text-warning">${result?.summary?.partial || 0}</div>
                             <div class="text-sm text-gray-600">Частично</div>
                         </div>
                         <div class="p-4 bg-red-50 rounded-lg">
-                            <div class="text-2xl font-bold text-danger">${result.summary.failed}</div>
+                            <div class="text-2xl font-bold text-danger">${result?.summary?.failed || 0}</div>
                             <div class="text-sm text-gray-600">Ошибки</div>
                         </div>
                     </div>
@@ -649,9 +710,9 @@
                             <div class="space-y-2">
                                 <div class="flex justify-between">
                                     <span>Всего фотографий:</span>
-                                    <span class="font-bold">${result.first_count.total_photos}</span>
+                                    <span class="font-bold">${result?.first_count?.total_photos || 0}</span>
                                 </div>
-                                ${Object.entries(result.first_count.by_status).map(([status, count]) => `
+                                ${Object.entries(result?.first_count?.by_status || {}).map(([status, count]) => `
                                     <div class="flex justify-between">
                                         <span>${status}:</span>
                                         <span class="font-bold">${count}</span>
@@ -665,11 +726,11 @@
                             <div class="space-y-2">
                                 <div class="flex justify-between">
                                     <span>Читаемых маркировок:</span>
-                                    <span class="font-bold">${result.second_count.readable_markings}</span>
+                                    <span class="font-bold">${result?.second_count?.readable_markings || 0}</span>
                                 </div>
                                 <div class="flex justify-between">
                                     <span>Уникальных артикулов:</span>
-                                    <span class="font-bold">${result.second_count.unique_articles}</span>
+                                    <span class="font-bold">${result?.second_count?.unique_articles || 0}</span>
                                 </div>
                             </div>
                         </div>
@@ -685,17 +746,17 @@
         }
 
         function showStep5Results(result) {
-            const comparisonTable = result.comparison.map(item => `
-                <tr class="${item.status === '✅' ? 'bg-green-50' : 
-                           item.status === '⬇️' ? 'bg-red-50' : 
-                           item.status === '⬆️' ? 'bg-yellow-50' : 'bg-orange-50'}">
-                    <td class="px-4 py-2 border-b font-mono text-sm">${item.article}</td>
-                    <td class="px-4 py-2 border-b text-center">${item.planned}</td>
-                    <td class="px-4 py-2 border-b text-center font-bold">${item.actual}</td>
-                    <td class="px-4 py-2 border-b text-center ${item.difference > 0 ? 'text-red-600' : item.difference < 0 ? 'text-yellow-600' : 'text-green-600'}">
-                        ${item.difference > 0 ? '+' : ''}${item.difference}
+            const comparisonTable = (result?.comparison || []).map(item => `
+                <tr class="${item?.status === '✅' ? 'bg-green-50' : 
+                           item?.status === '⬇️' ? 'bg-red-50' : 
+                           item?.status === '⬆️' ? 'bg-yellow-50' : 'bg-orange-50'}">
+                    <td class="px-4 py-2 border-b font-mono text-sm">${item?.article || '—'}</td>
+                    <td class="px-4 py-2 border-b text-center">${item?.planned || 0}</td>
+                    <td class="px-4 py-2 border-b text-center font-bold">${item?.actual || 0}</td>
+                    <td class="px-4 py-2 border-b text-center ${(item?.difference || 0) > 0 ? 'text-red-600' : (item?.difference || 0) < 0 ? 'text-yellow-600' : 'text-green-600'}">
+                        ${(item?.difference || 0) > 0 ? '+' : ''}${item?.difference || 0}
                     </td>
-                    <td class="px-4 py-2 border-b text-center text-xl">${item.status}</td>
+                    <td class="px-4 py-2 border-b text-center text-xl">${item?.status || '❓'}</td>
                 </tr>
             `).join('');
             
@@ -705,19 +766,19 @@
                     
                     <div class="grid grid-cols-4 gap-4 text-center mb-6">
                         <div class="p-4 bg-green-50 rounded-lg">
-                            <div class="text-2xl font-bold text-success">${result.summary.exact_match}</div>
+                            <div class="text-2xl font-bold text-success">${result?.summary?.exact_match || 0}</div>
                             <div class="text-sm text-gray-600">Точно</div>
                         </div>
                         <div class="p-4 bg-red-50 rounded-lg">
-                            <div class="text-2xl font-bold text-danger">${result.summary.shortage}</div>
+                            <div class="text-2xl font-bold text-danger">${result?.summary?.shortage || 0}</div>
                             <div class="text-sm text-gray-600">Недостает</div>
                         </div>
                         <div class="p-4 bg-yellow-50 rounded-lg">
-                            <div class="text-2xl font-bold text-warning">${result.summary.excess}</div>
+                            <div class="text-2xl font-bold text-warning">${result?.summary?.excess || 0}</div>
                             <div class="text-sm text-gray-600">Пересорт</div>
                         </div>
                         <div class="p-4 bg-orange-50 rounded-lg">
-                            <div class="text-2xl font-bold text-orange-600">${result.summary.extra_articles}</div>
+                            <div class="text-2xl font-bold text-orange-600">${result?.summary?.extra_articles || 0}</div>
                             <div class="text-sm text-gray-600">Лишние</div>
                         </div>
                     </div>
@@ -748,7 +809,7 @@
         }
 
         function showStep7Results(result) {
-            const filesTable = result.files.map(file => `
+            const filesTable = (result?.files || []).map(file => `
                 <div class="flex items-center justify-between p-4 bg-green-50 rounded-lg">
                     <div class="flex items-center space-x-3">
                         <div class="w-10 h-10 bg-success text-white rounded-lg flex items-center justify-center">
@@ -757,11 +818,11 @@
                             </svg>
                         </div>
                         <div>
-                            <div class="font-medium">${file.name}</div>
-                            <div class="text-sm text-gray-600">${file.type === 'invoice' ? 'Заполненная накладная' : 'Обновленная спецификация'}</div>
+                            <div class="font-medium">${file?.name || 'Файл'}</div>
+                            <div class="text-sm text-gray-600">${file?.type === 'invoice' ? 'Заполненная накладная' : 'Обновленная спецификация'}</div>
                         </div>
                     </div>
-                    <a href="/download/${file.type}/${file.name}" 
+                    <a href="/download/${file?.type || 'file'}/${file?.name || ''}" 
                        class="px-4 py-2 bg-primary text-white rounded-lg hover:bg-blue-700 flex items-center space-x-2">
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
@@ -778,8 +839,8 @@
                     <div class="mb-6 p-4 bg-blue-50 rounded-lg">
                         <h4 class="font-semibold mb-2">Параметры отгрузки:</h4>
                         <div class="grid grid-cols-2 gap-4 text-sm">
-                            <div><strong>Тип:</strong> ${result.summary.shipment_type}</div>
-                            <div><strong>Дата:</strong> ${result.summary.shipment_date}</div>
+                            <div><strong>Тип:</strong> ${result?.summary?.shipment_type || 'Неизвестно'}</div>
+                            <div><strong>Дата:</strong> ${result?.summary?.shipment_date || 'Неизвестно'}</div>
                         </div>
                     </div>
                     
@@ -857,8 +918,13 @@
         async function resetSession() {
             if (confirm('Вы уверены? Все данные будут удалены.')) {
                 try {
-                    await fetch('/reset', { method: 'POST' });
-                    location.reload();
+                    const response = await fetchWithTimeout('/reset', { method: 'POST' });
+                    if (response.ok) {
+                        location.reload();
+                    } else {
+                        const err = await response.json().catch(() => ({}));
+                        showError(err.detail || 'Ошибка сброса сессии');
+                    }
                 } catch (error) {
                     showError('Ошибка сброса: ' + error.message);
                 }
