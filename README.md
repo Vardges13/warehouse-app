@@ -68,8 +68,7 @@ warehouse-app/
 
 ## 🔑 API Key
 
-Gemini API ключ встроен в код:
-- **Key:** `AIzaSyCcNkbZp447GjuW8xjykrJ_N-r_3g10dhY`
+Укажите свой ключ в переменной `GEMINI_API_KEY` в локальном файле `.env`.
 - **Model:** `gemini-2.0-flash-exp`
 
 ## 📊 Статусы и индикаторы
@@ -110,7 +109,7 @@ uvicorn app:app --host 0.0.0.0 --port 8091 --reload
 
 ### Ошибки Gemini API
 - Проверьте интернет-соединение
-- API ключ встроен в код, дополнительная настройка не нужна
+- Проверьте, что переменная `GEMINI_API_KEY` задана в файле `.env`.
 
 ## ✨ Особенности
 
